@@ -360,15 +360,71 @@ def cmd_map_capability():
     if target not in VIRTUAL_TARGETS and target not in REAL_TARGETS:
         print(f"[X] '{target}' is not a known target. Adding anyway (custom).")
 
+    print()
+    print("Optional mapping parameters (press Enter to use defaults):")
+    gain = ask_number("Gain (scale factor, default 1.0)", default=1.0)
+    return_center = ask_bool("Return to center when input stable?", default=False)
+
+    mapping = {
+        "target": target,
+        "gain": float(gain),
+        "return_to_center": return_center,
+    }
+
     profile = load_profile()
-    profile["mappings"][source] = target
+    profile["mappings"][source] = mapping
     save_profile(profile)
 
     print()
-    print(f"[OK] {source} -> {target} added to {PROFILE_PATH}")
+    print(f"[OK] {source} -> {target} (gain={gain}, return_to_center={return_center})")
+    print(f"     saved to {PROFILE_PATH}")
+
+
+def _mapping_desc(mapping):
+    if isinstance(mapping, str):
+        return mapping
+
+    target = mapping.get("target", "?")
+    parts = [target]
+
+    if mapping.get("gain") not in (None, 1.0):
+        parts.append(f"gain={mapping['gain']}")
+    if mapping.get("return_to_center"):
+        parts.append("return_to_center")
+
+    return " ".join(parts)
 
 
 def cmd_list_mappings():
+    profile = load_profile()
+    mappings = profile.get("mappings", {})
+
+    print("=== Current Mappings ===")
+    if not mappings:
+        print("  (none)")
+
+    for source, mapping in mappings.items():
+        print(f"  {source} -> {_mapping_desc(mapping)}")
+
+    packages = list_package_capabilities()
+    mapped = set(mappings.keys())
+    unmapped = []
+
+    for pkg, caps in packages.items():
+        for cap in caps:
+            if cap not in mapped:
+                unmapped.append(cap)
+
+    if unmapped:
+        print()
+        print("Unmapped capabilities (not routed to any output):")
+        for cap in unmapped:
+            print(f"  {cap}")
+        print()
+        print("Map one with:  python tools/cnx_cli.py map-capability")
+
+
+def cmd_remove_mapping():
     profile = load_profile()
     mappings = profile.get("mappings", {})
 
@@ -376,9 +432,21 @@ def cmd_list_mappings():
         print("No mappings configured.")
         return
 
-    print("=== Current Mappings ===")
-    for source, target in mappings.items():
-        print(f"  {source} -> {target}")
+    cmd_list_mappings()
+
+    source = ask("Capability to remove (or Enter to cancel)")
+    if not source:
+        return
+
+    if source not in mappings:
+        print(f"[X] '{source}' is not mapped.")
+        return
+
+    del mappings[source]
+    profile["mappings"] = mappings
+    save_profile(profile)
+
+    print(f"[OK] Removed mapping for {source}")
 
 
 LIBRARY_URL = (
@@ -523,7 +591,8 @@ def main():
         print("  python tools/cnx_cli.py add-device       Add a custom device")
         print("  python tools/cnx_cli.py create-package   Create a capability package")
         print("  python tools/cnx_cli.py map-capability   Map a capability to an output target")
-        print("  python tools/cnx_cli.py list-mappings    Show current mappings")
+        print("  python tools/cnx_cli.py remove-mapping   Remove a mapping")
+        print("  python tools/cnx_cli.py list-mappings    Show current mappings + unmapped")
         print("  python tools/cnx_cli.py list-library     List devices in the GitHub library")
         print("  python tools/cnx_cli.py install-device <id>   Install a device from the library")
         print("  python tools/cnx_cli.py list-available   List configured devices")
@@ -538,6 +607,8 @@ def main():
         cmd_create_package()
     elif cmd == "map-capability":
         cmd_map_capability()
+    elif cmd == "remove-mapping":
+        cmd_remove_mapping()
     elif cmd == "list-mappings":
         cmd_list_mappings()
     elif cmd == "list-library":
