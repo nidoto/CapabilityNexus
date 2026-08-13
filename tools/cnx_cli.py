@@ -585,11 +585,89 @@ def cmd_remove_device():
     print(f"[OK] Removed device: {removed.get('name')}")
 
 
+def cmd_auto_route():
+    print("=== Auto-Route Device to Virtual X360 ===")
+    print()
+
+    from mapping.auto_route import AutoRouter
+
+    data = load_config()
+    devices = data.get("devices", [])
+
+    if not devices:
+        print("No devices configured. Add one first:")
+        print("  python tools/cnx_cli.py add-device")
+        return
+
+    print("Configured devices:")
+    for i, device in enumerate(devices):
+        print(f"  [{i}] {device.get('name')}  package={device.get('package')}")
+
+    try:
+        choice = int(ask("Device index to auto-route", required=True))
+    except ValueError:
+        print("[X] Invalid index.")
+        return
+
+    if choice < 0 or choice >= len(devices):
+        print("[X] Index out of range.")
+        return
+
+    device = devices[choice]
+    package = device.get("package")
+
+    cap_path = os.path.join(PACKAGES_PATH, package, "capabilities.json")
+    if not os.path.exists(cap_path):
+        print(f"[X] Capability package not found: {package}")
+        print("    Install it or create it first.")
+        return
+
+    with open(cap_path, "r", encoding="utf-8") as f:
+        caps_data = json.load(f)
+
+    capabilities = caps_data.get("capabilities", [])
+    outputs = caps_data.get("outputs", [])
+
+    prefix = device.get("driver")
+
+    router = AutoRouter()
+    mappings, missing = router.route(capabilities)
+
+    if not mappings:
+        print("[X] No auto-routable capabilities found for this device.")
+        return
+
+    profile = load_profile()
+    profile["mappings"].update(mappings)
+    save_profile(profile)
+
+    print()
+    print(f"[OK] Routed {len(mappings)} capabilities to Virtual X360:")
+    for src, m in mappings.items():
+        print(f"  {src} -> {m['target']}")
+
+    if outputs:
+        print()
+        print("[i] This device also has OUTPUT capabilities (not covered by auto-route):")
+        for out in outputs:
+            print(f"  {out.get('id')}")
+        print("  These need manual routing (e.g. vibration -> real device):")
+        print("    python tools/cnx_cli.py map-capability")
+
+    if missing:
+        print()
+        print("[i] Unroutable capabilities (no matching X360 output):")
+        for m in missing:
+            print(f"  {m}")
+        print("  Route them manually if needed.")
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage:")
         print("  python tools/cnx_cli.py add-device       Add a custom device")
         print("  python tools/cnx_cli.py create-package   Create a capability package")
+        print("  python tools/cnx_cli.py auto-route       One-click route device to Virtual X360")
         print("  python tools/cnx_cli.py map-capability   Map a capability to an output target")
         print("  python tools/cnx_cli.py remove-mapping   Remove a mapping")
         print("  python tools/cnx_cli.py list-mappings    Show current mappings + unmapped")
@@ -605,6 +683,8 @@ def main():
         cmd_add_device()
     elif cmd == "create-package":
         cmd_create_package()
+    elif cmd == "auto-route":
+        cmd_auto_route()
     elif cmd == "map-capability":
         cmd_map_capability()
     elif cmd == "remove-mapping":
