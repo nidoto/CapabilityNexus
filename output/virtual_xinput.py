@@ -65,12 +65,16 @@ class VirtualXInput(OutputDevice):
 
     def __init__(
         self,
-        device_id=0
+        device_id=0,
+        event_bus=None
     ):
 
         super().__init__(
             device_id
         )
+
+
+        self.event_bus = event_bus
 
 
         self._axis = {
@@ -121,10 +125,56 @@ class VirtualXInput(OutputDevice):
                 "[XInput] Virtual Xbox 360 Gamepad Created"
             )
 
+            self._register_request_notification()
+
         except Exception as e:
 
             print(
                 "[XInput] Real gamepad unavailable, using simulation:",
+                e
+            )
+
+
+    def _register_request_notification(
+        self
+    ):
+
+        #
+        # 游戏对虚拟手柄发送请求（震动反馈）时，
+        # vgamepad 会调用此回调。
+        # 我们把它转换为 DeviceRequestEvent 发布到 EventBus，
+        # 让客户端决定：映射到真实设备 / 其他虚拟设备 / 提示用户。
+        #
+
+        if not self.event_bus:
+            return
+
+        try:
+
+            from core.system_event import DeviceRequestEvent
+
+            def on_request(client, target, large_motor, small_motor, led_number, user_data):
+                self.event_bus.publish(
+                    DeviceRequestEvent(
+                        source="virtual_x360",
+                        target="xbox.motor_left",
+                        value=float(large_motor),
+                    )
+                )
+                self.event_bus.publish(
+                    DeviceRequestEvent(
+                        source="virtual_x360",
+                        target="xbox.motor_right",
+                        value=float(small_motor),
+                    )
+                )
+
+            self._gamepad.register_notification(on_request)
+
+        except Exception as e:
+
+            print(
+                "[XInput] Request notification failed:",
                 e
             )
 

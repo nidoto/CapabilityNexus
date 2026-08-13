@@ -14,8 +14,9 @@ class OutputRouter:
         "xbox": RealXInputOutput,
     }
 
-    def __init__(self, virtual_device=None, real_devices=None):
-        self.virtual = virtual_device or VirtualXInput(0)
+    def __init__(self, virtual_device=None, real_devices=None, event_bus=None):
+        self.event_bus = event_bus
+        self.virtual = virtual_device or VirtualXInput(0, event_bus=event_bus)
         self.real = real_devices or {}
 
     def send(self, target, value):

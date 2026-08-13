@@ -241,7 +241,36 @@ mapping_engine.load_profile(
 
 from output.router import OutputRouter
 
-output_router = OutputRouter()
+output_router = OutputRouter(
+    event_bus=event_bus
+)
+
+
+#
+# 需求处理：游戏请求（如震动）→ 映射或提示
+#
+
+import json as _json
+
+with open(
+    "profiles/default.json",
+    "r",
+    encoding="utf-8"
+) as _f:
+
+    _profile_data = _json.load(_f)
+
+
+from output.request_handler import RequestHandler
+
+request_handler = RequestHandler(
+    event_bus,
+    router=output_router,
+    mappings=_profile_data.get(
+        "mappings",
+        {}
+    ),
+)
 
 
 #
