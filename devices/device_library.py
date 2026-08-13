@@ -104,3 +104,72 @@ class DeviceLibrary:
                     return device
 
         return None
+
+    def get_device(self, device_id):
+        if self._devices is None:
+            self.refresh()
+
+        for device in self._devices:
+            if device.get("id") == device_id:
+                return device
+
+        return None
+
+    def list_devices(self):
+        if self._devices is None:
+            self.refresh()
+        return self._devices or []
+
+    def _file_url(self, device_id, filename):
+        if os.path.exists(self.library_url):
+            return os.path.join(
+                os.path.dirname(self.library_url),
+                "devices",
+                device_id,
+                filename,
+            )
+
+        base = self.library_url.rsplit("/", 1)[0]
+        return f"{base}/devices/{device_id}/{filename}"
+
+    def _fetch_file(self, url):
+        if url.startswith("http"):
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "CapabilityNexus"},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+
+        if os.path.exists(url):
+            with open(url, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        raise FileNotFoundError(url)
+
+    def download_device(self, device_id):
+        device = self.get_device(device_id)
+
+        if device is None:
+            print("[DeviceLibrary] Device not in library:", device_id)
+            return None
+
+        result = dict(device)
+
+        try:
+            result["manifest"] = self._fetch_file(
+                self._file_url(device_id, "manifest.json")
+            )
+        except Exception as e:
+            print("[DeviceLibrary] Manifest download failed:", e)
+            return None
+
+        try:
+            result["capabilities"] = self._fetch_file(
+                self._file_url(device_id, "capabilities.json")
+            )
+        except Exception as e:
+            print("[DeviceLibrary] No capabilities file (template):", e)
+            result["capabilities"] = None
+
+        return result

@@ -309,6 +309,142 @@ def cmd_list_mappings():
         print(f"  {source} -> {target}")
 
 
+LIBRARY_URL = (
+    "https://raw.githubusercontent.com/nidoto/"
+    "CapabilityNexus-Devices/master/index.json"
+)
+
+
+def _make_library():
+    from devices.device_library import DeviceLibrary
+
+    return DeviceLibrary(
+        cache_path=os.path.join("config", "device_library_cache.json"),
+        library_url=LIBRARY_URL,
+    )
+
+
+def cmd_list_library():
+    print("=== Device Library ===")
+    print()
+
+    library = _make_library()
+    library.refresh()
+
+    devices = library.list_devices()
+
+    if not devices:
+        print("  (empty - check network or run offline)")
+        return
+
+    for device in devices:
+        kind = device.get("kind", "?")
+        name = device.get("name", device.get("id"))
+        print(f"  [{kind:8s}] {device.get('id'):25s} {name}")
+
+    print()
+    print("Install one with:  python tools/cnx_cli.py install-device <id>")
+
+
+def cmd_install_device():
+    if len(sys.argv) < 3:
+        print("Usage: python tools/cnx_cli.py install-device <device_id>")
+        print("List devices: python tools/cnx_cli.py list-library")
+        return
+
+    device_id = sys.argv[2]
+
+    library = _make_library()
+    library.refresh()
+
+    downloaded = library.download_device(device_id)
+
+    if downloaded is None:
+        print(f"[X] Could not download device '{device_id}'")
+        return
+
+    print()
+    print("Installing device:", downloaded.get("name"))
+
+    manifest = downloaded.get("manifest", {})
+    capabilities = downloaded.get("capabilities", {})
+    package = downloaded.get("package")
+
+    package_dir = os.path.join(PACKAGES_PATH, package)
+    os.makedirs(package_dir, exist_ok=True)
+
+    with open(os.path.join(package_dir, "manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=4)
+
+    with open(os.path.join(package_dir, "capabilities.json"), "w", encoding="utf-8") as f:
+        json.dump(capabilities, f, ensure_ascii=False, indent=4)
+
+    print(f"[OK] Capability package installed: packages/{package}/")
+
+    if downloaded.get("kind") == "product":
+        entry = {
+            "name": downloaded.get("name"),
+            "driver": downloaded.get("driver", "xinput"),
+            "package": package,
+        }
+        data = load_config()
+        data["devices"].append(entry)
+        save_config(data)
+        print(f"[OK] Device added to {CONFIG_PATH}")
+    else:
+        print()
+        print("[i] This is a template board (ESP32/Raspberry Pi).")
+        print("    Its capabilities are up to you. Add it with:")
+        print("    python tools/cnx_cli.py add-device")
+
+    print()
+    print("Map capabilities to outputs:")
+    print("    python tools/cnx_cli.py map-capability")
+
+
+def cmd_list_available():
+    data = load_config()
+    devices = data.get("devices", [])
+
+    if not devices:
+        print("No devices configured yet.")
+        return
+
+    print("=== Configured Devices ===")
+    for i, device in enumerate(devices):
+        print(f"  [{i}] {device.get('name')}  driver={device.get('driver')}")
+        if device.get("port"):
+            print(f"      port={device.get('port')} baudrate={device.get('baudrate')}")
+        print(f"      package={device.get('package')}")
+
+
+def cmd_remove_device():
+    data = load_config()
+    devices = data.get("devices", [])
+
+    if not devices:
+        print("No devices configured.")
+        return
+
+    cmd_list_available()
+
+    try:
+        choice = int(ask("Remove device index", required=True))
+    except ValueError:
+        print("[X] Invalid index.")
+        return
+
+    if choice < 0 or choice >= len(devices):
+        print("[X] Index out of range.")
+        return
+
+    removed = devices.pop(choice)
+    data["devices"] = devices
+    save_config(data)
+
+    print(f"[OK] Removed device: {removed.get('name')}")
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage:")
@@ -316,6 +452,10 @@ def main():
         print("  python tools/cnx_cli.py create-package   Create a capability package")
         print("  python tools/cnx_cli.py map-capability   Map a capability to an output target")
         print("  python tools/cnx_cli.py list-mappings    Show current mappings")
+        print("  python tools/cnx_cli.py list-library     List devices in the GitHub library")
+        print("  python tools/cnx_cli.py install-device <id>   Install a device from the library")
+        print("  python tools/cnx_cli.py list-available   List configured devices")
+        print("  python tools/cnx_cli.py remove-device    Remove a configured device")
         return
 
     cmd = sys.argv[1]
@@ -328,6 +468,14 @@ def main():
         cmd_map_capability()
     elif cmd == "list-mappings":
         cmd_list_mappings()
+    elif cmd == "list-library":
+        cmd_list_library()
+    elif cmd == "install-device":
+        cmd_install_device()
+    elif cmd == "list-available":
+        cmd_list_available()
+    elif cmd == "remove-device":
+        cmd_remove_device()
     else:
         print("Unknown command:", cmd)
 
