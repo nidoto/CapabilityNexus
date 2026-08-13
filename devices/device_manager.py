@@ -128,6 +128,14 @@ class DeviceManager:
             device.connect()
             return device
 
+        if driver == "hid":
+            from devices.hid_device import HIDDevice
+
+            index = entry.get("index", 0)
+            device = HIDDevice(self.event_bus, index=index)
+            device.connect()
+            return device
+
         if driver == "serial":
             from devices.connection_factory import ConnectionFactory
             from protocols.serial_protocol import SerialParser

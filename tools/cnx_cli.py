@@ -93,12 +93,22 @@ def cmd_add_device():
     print()
 
     name = ask("Device name", required=True)
-    driver = ask("Driver (serial/xinput)", default="serial")
+    driver = ask("Driver (serial/xinput/hid)", default="serial")
 
     if driver == "xinput":
         entry = {
             "name": name,
             "driver": "xinput",
+        }
+    elif driver == "hid":
+        index = ask_number("Joystick index (0, 1, 2...)", default=0)
+        package = ask("Capability package name", default="hid_generic")
+
+        entry = {
+            "name": name,
+            "driver": "hid",
+            "index": int(index),
+            "package": package,
         }
     else:
         print()

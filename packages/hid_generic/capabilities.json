@@ -1,0 +1,31 @@
+{
+    "capabilities": [
+
+        {
+            "id": "hid.axis*",
+            "category": "axis",
+            "value_type": "float",
+            "range": [-1.0, 1.0],
+            "continuous": true,
+            "return_center": true
+        },
+
+        {
+            "id": "hid.button*",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false
+        },
+
+        {
+            "id": "hid.hat*",
+            "category": "axis",
+            "value_type": "float",
+            "range": [-1.0, 1.0],
+            "continuous": true,
+            "return_center": true
+        }
+
+    ]
+}

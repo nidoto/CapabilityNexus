@@ -1,0 +1,7 @@
+{
+    "name": "Generic USB HID Device",
+    "author": "CapabilityNexus",
+    "version": "1.0",
+    "description": "Generic USB HID input (joystick/wheel/flight stick) via pygame",
+    "type": "input"
+}
