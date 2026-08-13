@@ -4,8 +4,11 @@
         {
             "name": "My ESP32 Custom Board",
             "driver": "serial",
-            "port": "COM3",
-            "baudrate": 115200,
+            "connection": {
+                "type": "serial",
+                "port": "COM3",
+                "baudrate": 115200
+            },
             "vid": "1A86",
             "pid": "55D3",
             "package": "motion_demo",

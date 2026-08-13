@@ -129,12 +129,18 @@ class DeviceManager:
             return device
 
         if driver == "serial":
-            from devices.serial_device import SerialDevice
-
-            port = detected.get("port") or entry.get("port")
-            baudrate = entry.get("baudrate", 115200)
-
+            from devices.connection_factory import ConnectionFactory
             from protocols.serial_protocol import SerialParser
+
+            connection_params = entry.get("connection", {})
+
+            if "type" not in connection_params:
+                connection_params = {
+                    "type": "serial",
+                    "port": entry.get("port"),
+                    "baudrate": entry.get("baudrate", 115200),
+                }
+
             protocol = entry.get("protocol", {})
             parser = SerialParser(
                 self.event_bus,
@@ -145,9 +151,12 @@ class DeviceManager:
             def callback(line):
                 parser.parse(line)
 
-            device = SerialDevice(port=port, baudrate=baudrate, callback=callback)
-            device.connect()
-            return device
+            connection = ConnectionFactory.create(
+                callback,
+                connection_params,
+            )
+            connection.open()
+            return connection
 
         print("[DeviceManager] Unknown driver:", driver)
         return None

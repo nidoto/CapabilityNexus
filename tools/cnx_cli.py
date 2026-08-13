@@ -101,17 +101,56 @@ def cmd_add_device():
             "driver": "xinput",
         }
     else:
-        port = ask("Serial port (e.g. COM3)", required=True)
-        baudrate = ask_number("Baudrate", default=115200)
+        print()
+        print("Connection types:")
+        print("  serial     - USB serial port (COMx)")
+        print("  tcp        - WiFi / network (host:port)")
+        print("  bluetooth  - Bluetooth RFCOMM")
+        print("  custom     - your own connection script")
+        conn_type = ask("Connection type (serial/tcp/bluetooth/custom)", default="serial")
+
         vid = ask("VID (optional, e.g. 1A86)")
         pid = ask("PID (optional, e.g. 55D3)")
         package = ask("Capability package name (folder in packages/)", required=True)
 
+        if conn_type == "tcp":
+            host = ask("Host (e.g. 192.168.1.100)", required=True)
+            port = ask_number("Port", default=8888)
+            connection = {
+                "type": "tcp",
+                "host": host,
+                "port": int(port),
+            }
+        elif conn_type == "bluetooth":
+            device = ask("Bluetooth device (COMx or MAC)", required=True)
+            channel = ask_number("Channel", default=1)
+            connection = {
+                "type": "bluetooth",
+                "device": device,
+                "channel": int(channel),
+            }
+        elif conn_type == "custom":
+            print()
+            print("Custom connection uses config/custom_connections.py")
+            print("Define build_connection(callback, params) there.")
+            params = ask("Custom params (comma k=v, optional)")
+            connection = {
+                "type": "custom",
+                "params": dict(p.split("=") for p in params.split(",") if "=" in p),
+            }
+        else:
+            port = ask("Serial port (e.g. COM3)", required=True)
+            baudrate = ask_number("Baudrate", default=115200)
+            connection = {
+                "type": "serial",
+                "port": port,
+                "baudrate": int(baudrate),
+            }
+
         entry = {
             "name": name,
             "driver": "serial",
-            "port": port,
-            "baudrate": int(baudrate),
+            "connection": connection,
             "package": package,
             "protocol": ask_serial_protocol(),
         }
