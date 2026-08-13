@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 CONFIG_PATH = os.path.join("config", "devices.json")
 PACKAGES_PATH = os.path.join("packages")
+PROFILE_PATH = os.path.join("profiles", "default.json")
 
 
 def ask(prompt, default=None, required=False):
@@ -192,11 +193,129 @@ def cmd_create_package():
     print("Now add a device that uses it:  python tools/cnx_cli.py add-device")
 
 
+VIRTUAL_TARGETS = {
+    "left_x": "Virtual X360 - Left stick X",
+    "left_y": "Virtual X360 - Left stick Y",
+    "right_x": "Virtual X360 - Right stick X",
+    "right_y": "Virtual X360 - Right stick Y",
+    "left_trigger": "Virtual X360 - Left trigger",
+    "right_trigger": "Virtual X360 - Right trigger",
+    "button_a": "Virtual X360 - Button A",
+    "button_b": "Virtual X360 - Button B",
+    "button_x": "Virtual X360 - Button X",
+    "button_y": "Virtual X360 - Button Y",
+    "button_lb": "Virtual X360 - LB",
+    "button_rb": "Virtual X360 - RB",
+    "button_start": "Virtual X360 - Start",
+    "button_back": "Virtual X360 - Back",
+    "button_dpad_up": "Virtual X360 - D-pad Up",
+    "button_dpad_down": "Virtual X360 - D-pad Down",
+    "button_dpad_left": "Virtual X360 - D-pad Left",
+    "button_dpad_right": "Virtual X360 - D-pad Right",
+}
+
+REAL_TARGETS = {
+    "xbox.motor_left": "Real Xbox One - Left motor (rumble)",
+    "xbox.motor_right": "Real Xbox One - Right motor (rumble)",
+}
+
+
+def load_profile():
+    if os.path.exists(PROFILE_PATH):
+        with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"mappings": {}}
+
+
+def save_profile(data):
+    os.makedirs(os.path.dirname(PROFILE_PATH), exist_ok=True)
+    with open(PROFILE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def list_package_capabilities():
+    packages = {}
+
+    if os.path.exists(PACKAGES_PATH):
+        for name in os.listdir(PACKAGES_PATH):
+            cap_path = os.path.join(PACKAGES_PATH, name, "capabilities.json")
+            if os.path.exists(cap_path):
+                with open(cap_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                packages[name] = [
+                    c["id"] for c in data.get("capabilities", [])
+                ]
+
+    return packages
+
+
+def cmd_map_capability():
+    print("=== Map Capability to Output ===")
+    print()
+
+    packages = list_package_capabilities()
+
+    if not packages:
+        print("No capability packages found under packages/.")
+        print("Create one first:  python tools/cnx_cli.py create-package")
+        return
+
+    print("Available capabilities:")
+    capability_ids = []
+    for pkg, caps in packages.items():
+        for cap in caps:
+            capability_ids.append(cap)
+            print(f"  {cap}   (from {pkg})")
+
+    print()
+    source = ask("Capability to map", required=True)
+    if source not in capability_ids:
+        print(f"[X] '{source}' is not a known capability.")
+        return
+
+    print()
+    print("Available output targets:")
+    print("  -- Virtual X360 --")
+    for t, desc in VIRTUAL_TARGETS.items():
+        print(f"  {t}  ({desc})")
+    print("  -- Real devices --")
+    for t, desc in REAL_TARGETS.items():
+        print(f"  {t}  ({desc})")
+
+    print()
+    target = ask("Output target", required=True)
+
+    if target not in VIRTUAL_TARGETS and target not in REAL_TARGETS:
+        print(f"[X] '{target}' is not a known target. Adding anyway (custom).")
+
+    profile = load_profile()
+    profile["mappings"][source] = target
+    save_profile(profile)
+
+    print()
+    print(f"[OK] {source} -> {target} added to {PROFILE_PATH}")
+
+
+def cmd_list_mappings():
+    profile = load_profile()
+    mappings = profile.get("mappings", {})
+
+    if not mappings:
+        print("No mappings configured.")
+        return
+
+    print("=== Current Mappings ===")
+    for source, target in mappings.items():
+        print(f"  {source} -> {target}")
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage:")
-        print("  python tools/cnx_cli.py add-device      Add a custom device")
-        print("  python tools/cnx_cli.py create-package  Create a capability package")
+        print("  python tools/cnx_cli.py add-device       Add a custom device")
+        print("  python tools/cnx_cli.py create-package   Create a capability package")
+        print("  python tools/cnx_cli.py map-capability   Map a capability to an output target")
+        print("  python tools/cnx_cli.py list-mappings    Show current mappings")
         return
 
     cmd = sys.argv[1]
@@ -205,6 +324,10 @@ def main():
         cmd_add_device()
     elif cmd == "create-package":
         cmd_create_package()
+    elif cmd == "map-capability":
+        cmd_map_capability()
+    elif cmd == "list-mappings":
+        cmd_list_mappings()
     else:
         print("Unknown command:", cmd)
 

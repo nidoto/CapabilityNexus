@@ -167,5 +167,25 @@
             "return_center": false
         }
 
+    ],
+
+    "outputs": [
+
+        {
+            "id": "xbox.motor_left",
+            "category": "motor",
+            "value_type": "float",
+            "range": [0, 65535],
+            "continuous": true
+        },
+
+        {
+            "id": "xbox.motor_right",
+            "category": "motor",
+            "value_type": "float",
+            "range": [0, 65535],
+            "continuous": true
+        }
+
     ]
 }

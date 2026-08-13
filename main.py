@@ -44,13 +44,6 @@ from mapping.mapper import MappingEngine
 
 
 #
-# Output
-#
-
-from output.virtual_xinput import VirtualXInput
-
-
-#
 # Protocol
 #
 
@@ -243,19 +236,12 @@ mapping_engine.load_profile(
 
 
 #
-# Virtual XInput
+# 输出路由：虚拟 x360 + 真实设备输出
 #
 
-#
-# 根据你的 virtual_xinput.py
-# 如果需要 device_id，
-# 修改这里
-#
+from output.router import OutputRouter
 
-xinput = VirtualXInput(
-    "CNX"
-)
-
+output_router = OutputRouter()
 
 
 #
@@ -276,16 +262,13 @@ def output_receive(
     )
 
 
-    xinput.send(
+    output_router.send(
 
         event.target,
 
         event.value
 
     )
-
-
-    xinput.update()
 
 
 
