@@ -24,17 +24,24 @@ class CapabilityNexusGUI:
         menubar = tk.Menu(self.root)
 
         settings_menu = tk.Menu(menubar, tearoff=0)
-        settings_menu.add_command(label="Add Device...", command=self.add_device_dialog)
-        settings_menu.add_command(label="Install from Library...", command=self.install_from_library)
+        settings_menu.add_command(label="Preferences...", command=self.show_preferences)
         settings_menu.add_separator()
         settings_menu.add_command(label="Exit", command=self.root.quit)
         menubar.add_cascade(label="System", menu=settings_menu)
 
-        input_menu = tk.Menu(menubar, tearoff=0)
-        input_menu.add_command(label="Add Input Device...", command=self.add_device_dialog)
-        input_menu.add_command(label="Refresh Devices", command=self.refresh_devices)
-        input_menu.add_command(label="Auto-Route Selected", command=self.auto_route)
-        menubar.add_cascade(label="Input", menu=input_menu)
+        devices_menu = tk.Menu(menubar, tearoff=0)
+        devices_menu.add_command(label="Add Device...", command=self.add_device_dialog)
+        devices_menu.add_command(label="Install from Library...", command=self.install_from_library)
+        devices_menu.add_separator()
+        devices_menu.add_command(label="Refresh", command=self.refresh_devices)
+        menubar.add_cascade(label="Devices", menu=devices_menu)
+
+        mappings_menu = tk.Menu(menubar, tearoff=0)
+        mappings_menu.add_command(label="Auto-Route Selected", command=self.auto_route)
+        mappings_menu.add_command(label="Remove Mapping...", command=self.remove_mapping)
+        mappings_menu.add_separator()
+        mappings_menu.add_command(label="View Mappings", command=self.refresh_mappings)
+        menubar.add_cascade(label="Mappings", menu=mappings_menu)
 
         output_menu = tk.Menu(menubar, tearoff=0)
         output_menu.add_command(label="Output Devices", command=self.show_output_devices)
@@ -107,23 +114,55 @@ class CapabilityNexusGUI:
         for device in data.get("devices", []):
             name = device.get("name", "?")
             package = device.get("package", "")
+            conn = config_io.device_conn_label(device)
 
             device_node = self.device_tree.insert(
                 "",
                 tk.END,
-                text=f"{name}  [{device.get('driver')}]",
+                text=f"{name}  [{conn}]",
                 values=("device",),
                 open=True,
             )
 
             info = packages.get(package)
 
-            if info:
-                for cap in info["capabilities"]:
+            if not info:
+                continue
+
+            inputs = info.get("capabilities_full", [])
+            outputs = info.get("outputs_full", [])
+
+            if inputs:
+                input_node = self.device_tree.insert(
+                    device_node,
+                    tk.END,
+                    text="Input",
+                    values=("group",),
+                    open=True,
+                )
+
+                for cap in inputs:
                     self.device_tree.insert(
-                        device_node,
+                        input_node,
                         tk.END,
-                        text=cap,
+                        text=cap.get("id", cap),
+                        values=("capability",),
+                    )
+
+            if outputs:
+                output_node = self.device_tree.insert(
+                    device_node,
+                    tk.END,
+                    text="Output",
+                    values=("group",),
+                    open=True,
+                )
+
+                for cap in outputs:
+                    self.device_tree.insert(
+                        output_node,
+                        tk.END,
+                        text=cap.get("id", cap),
                         values=("capability",),
                     )
 
@@ -309,13 +348,20 @@ class CapabilityNexusGUI:
             return
 
         item = self.device_tree.item(selection[0])
-        device_id = item.get("values", [None])[0] if item.get("values") else None
+        node_id = selection[0]
 
-        if device_id == "capability":
-            parent = self.device_tree.parent(selection[0])
-            device_text = self.device_tree.item(parent).get("text")
+        while node_id:
+            node = self.device_tree.item(node_id)
+            values = node.get("values", []) or []
+
+            if values and values[0] == "device":
+                device_text = node.get("text")
+                break
+
+            node_id = self.device_tree.parent(node_id)
         else:
-            device_text = item.get("text")
+            self.log("Select a device to auto-route.")
+            return
 
         data = config_io.load_config()
         device = next(
@@ -475,6 +521,16 @@ class CapabilityNexusGUI:
 
         ttk.Button(dialog, text="Install", command=do_install).pack(padx=8, pady=8)
 
+    def show_preferences(self):
+        messagebox.showinfo(
+            "Preferences",
+            "Settings are stored in:\n\n"
+            "  config/devices.json   - connected devices\n"
+            "  profiles/default.json - mappings\n"
+            "  config/processors.json - processor pipelines\n\n"
+            "These JSON files can be edited directly.",
+        )
+
     def show_output_devices(self):
         from output.devices import OUTPUT_DEVICES
 
@@ -505,11 +561,11 @@ class CapabilityNexusGUI:
         messagebox.showinfo(
             "Help",
             "How to use:\n\n"
-            "1. System > Add Device - add your input device\n"
+            "1. Devices > Add Device - add your input device\n"
             "2. Double-click a device function in the tree\n"
             "3. Choose an output device (X360/Keyboard/Mouse)\n"
             "4. Choose the output function, click Apply\n\n"
-            "Use Input > Auto-Route for one-click default mapping.",
+            "Use Mappings > Auto-Route for one-click default mapping.",
         )
 
     #

@@ -46,12 +46,39 @@ def list_package_capabilities():
                     "capabilities": [
                         c["id"] for c in data.get("capabilities", [])
                     ],
+                    "capabilities_full": data.get("capabilities", []),
                     "outputs": [
                         c["id"] for c in data.get("outputs", [])
                     ],
+                    "outputs_full": data.get("outputs", []),
                 }
 
     return packages
+
+
+CONN_LABELS = {
+    "xinput": "XInput",
+    "hid": "HID",
+    "serial": "USB/Serial",
+    "tcp": "WiFi/TCP",
+    "udp": "WiFi/UDP",
+    "bluetooth": "Bluetooth",
+    "ftms": "Bluetooth/BLE",
+}
+
+
+def device_conn_label(device):
+    driver = device.get("driver")
+    connection = device.get("connection", {})
+    conn_type = connection.get("type")
+
+    if conn_type and conn_type in CONN_LABELS:
+        return CONN_LABELS[conn_type]
+
+    if driver in CONN_LABELS:
+        return CONN_LABELS[driver]
+
+    return driver or "?"
 
 
 def mapping_desc(mapping):
