@@ -1,4 +1,4 @@
-CapabilityNexus V1.2.0 系统架构说明
+CapabilityNexus V1.3.0 系统架构说明
 1. 项目定位
 
 CapabilityNexus 是一个通用现实输入能力转换框架。
@@ -11,6 +11,10 @@ CapabilityNexus 是一个通用现实输入能力转换框架。
 
 输入方向：设备产生能力。
 输出方向：设备接收请求（如震动马达）。
+
+输出不限定某一种设备：
+
+虚拟 x360 / 键盘 / 鼠标 / 真实设备 / 任意。
 
 核心思想：
 
@@ -31,7 +35,7 @@ CapabilityNexus 是一个通用现实输入能力转换框架。
 
 完整数据链：
 
-ESP32 / Xbox One / USB / Serial / Bluetooth
+ESP32 / Xbox One / USB / Serial / Bluetooth / WiFi
               |
               |
               v
@@ -39,7 +43,11 @@ ESP32 / Xbox One / USB / Serial / Bluetooth
               |
               |
               v
-        设备驱动 (SerialDevice / XInputDevice)
+        连接层 (SerialConnection / TcpConnection / ...)
+              |
+              |
+              v
+        输入源 (SerialDevice / XInputDevice / HIDDevice / FTMSDevice)
               |
               |
               v
@@ -63,8 +71,8 @@ ESP32 / Xbox One / USB / Serial / Bluetooth
               |
               |
               v
-      Transform Layer      ← 预留扩展点（未来用户自定义逻辑表）
-              |              （组合 / 定时 / 条件触发）
+      Transport Controller   ← stream/state/edge 传输控制
+              |
               |
               v
         Mapping Engine
@@ -77,12 +85,9 @@ ESP32 / Xbox One / USB / Serial / Bluetooth
               v
          Output Router
               |
-      ┌───────┴───────┐
-      v               v
-   虚拟 x360      真实 Xbox One
-      |               |
-      v               v
-    游戏          震动马达
+      ┌───────┬───────┬───────┐
+      v       v       v       v
+  虚拟x360  键盘    鼠标   真实设备
 3. 双向数据流
 
 游戏也会向虚拟设备发送请求（如震动反馈）。
@@ -102,7 +107,7 @@ DeviceRequestEvent
 RequestHandler
     |
     v
-已映射？→ 路由到真实设备 / 另一虚拟设备
+已映射？→ 路由到目标
     |
     v
 未映射？→ 提示用户
@@ -112,44 +117,31 @@ RequestHandler
 
 core/
 
-负责整个系统基础通信。
-
 4.1 EventBus
-
-文件：
 
 core/event_bus.py
 
-作用：
-
-系统内部事件通信中心。
-
-所有模块之间不直接调用。
-
-支持两类事件：
+两类事件：
 
 - OutputEvent：输入方向（能力 → 输出）
 - DeviceRequestEvent：输出方向（游戏请求 → 设备）
 4.2 Capability Registry
 
-文件：
-
 core/capability_registry.py
 
-作用：
+支持通配模式：
 
-记录设备提供什么能力。
+hid.axis* 匹配 hid.axis0 / hid.axis1 / ...
 
-Capability 不关心来源。
+4.3 Transport Controller
 
-它只描述：
+core/transport.py
 
-我有什么能力。
+按能力声明的传输模式决定是否广播：
 
-能力分为：
-
-- 输入能力（轴 / 扳机 / 按钮）
-- 输出能力（震动马达 / 灯）
+stream - 持续流，按 rate 节流
+state  - 最新值，值变化才发
+edge   - 边沿触发，按下/释放瞬间才发
 5. 设备识别系统
 
 目录：
@@ -158,67 +150,61 @@ devices/
 
 5.1 DeviceDetector
 
-文件：
-
 devices/detector.py
 
-作用：
-
-枚举系统设备，提取指纹。
-
-支持：
+枚举系统设备，提取指纹：
 
 - XInput 手柄槽位（0-3）
 - 串口（VID:PID + 描述）
 5.2 DeviceLibrary
 
-文件：
-
 devices/device_library.py
 
-作用：
+拉取设备库（GitHub raw），按指纹匹配，本地缓存。
 
-拉取设备库（GitHub raw），按指纹匹配。
+设备分类：
 
-本地缓存，离线可用。
-
-指纹匹配规则：
-
-设备库声明什么字段，就检查什么字段。
-检测指纹的多余字段不影响匹配。
-5.3 设备分类
-
-product（成品设备）：
-
-指纹匹配 → 自动装配（如 Xbox One）。
-
-template（开发板模板）：
-
-指纹匹配 → 识别出板子 → 提示用户自定义能力
-（如 ESP32：可能是陀螺仪 / 压力计 / 温度计）。
-
-未知设备：
-
-提示用户手动添加（config/devices.json）。
-5.4 DeviceManager
-
-文件：
+product（成品设备）→ 自动装配
+template（开发板模板）→ 提示用户自定义能力
+未知设备 → 提示手动添加
+5.3 DeviceManager
 
 devices/device_manager.py
 
-作用：
-
-装配设备。
-
-流程：
+装配设备：
 
 1. 枚举设备
 2. 查设备库（auto 识别）
 3. 未命中 → 查 config/devices.json（手动配置）
-4. 构建驱动实例（SerialDevice / XInputDevice）
-6. Stream 数据流层
+4. 构建输入源实例
+6. 连接层
 
-相关文件：
+目录：
+
+devices/connection.py
+
+统一连接抽象 LineConnection：
+
+serial  - SerialConnection（USB 串口）
+tcp     - TcpConnection（有线/WiFi）
+udp     - UdpConnection（低延迟网络）
+bluetooth - BluetoothConnection（RFCOMM）
+custom  - 用户自定义（config/custom_connections.py）
+
+工厂：
+
+devices/connection_factory.py
+7. 输入源
+
+目录：
+
+devices/
+
+SerialDevice    - 串口设备（ESP32 等）
+XInputDevice    - Xbox 手柄（XInput API）
+HIDDevice       - USB HID 手柄（pygame）
+FTMSDevice      - BLE 骑行台（bleak）
+8. Stream 数据流层
 
 core/stream.py
 
@@ -236,16 +222,10 @@ channel: motion.pitch
 
 value: 90
 
-StreamData 不处理校准、限幅、映射。
-
-它只是数据进入系统。
-7. Channel 数据标准化层
-
-文件：
+StreamAdapter 按能力 id 匹配（支持通配模式）生成 Channel。
+9. Channel 数据标准化层
 
 core/channel.py
-
-作用：
 
 把不同设备输入转换成统一格式。
 
@@ -254,44 +234,23 @@ Channel
 id: motion.pitch
 
 value: 90
-8. Processor 系统
-
-目录：
+10. Processor 系统
 
 processors/
 
-作用：
-
-数据处理流水线。
-
 支持：
 
-Normalizer
-
-范围转换（-180~180 → -32768~32767）。
-
-Deadzone
-
-死区处理（滤除小范围抖动）。
-
-Sensitivity
-
-灵敏度（input * 倍率）。
-
-Clamp
-
-限制输出范围。
+Normalizer - 范围转换
+Deadzone   - 死区处理
+Sensitivity - 灵敏度
+Clamp      - 限制范围
 
 配置：
 
 config/processors.json
-9. Mapping Engine
-
-目录：
+11. Mapping Engine
 
 mapping/
-
-作用：
 
 能力 → 输出设备。
 
@@ -299,240 +258,161 @@ mapping/
 
 profiles/default.json
 
-支持两种目标：
+映射项支持：
 
-- 虚拟设备目标（right_x / button_a / left_trigger ...）
-- 真实设备目标（xbox.motor_left / xbox.motor_right ...）
+target（目标功能）
+gain（增益）
+return_to_center（回中策略）
 
-9.1 Transform Layer（预留扩展点）
+一键全路由：
 
-位置：
+mapping/auto_route.py（AutoRouter）
 
-ProcessedChannel 之后、MappingEngine 之前。
+按命名约定自动匹配：
 
-作用（未来实现，当前仅预留接口）：
-
-用户自定义逻辑变换表。
-
-用户可用简单逻辑语句定义变换，例如：
-
-按 A 键 3 秒 → 触发 B 键
-
-按 X 键两次 → 触发 Y
-
-连按 → 双击
-
-接口约定：
-
-Transform Layer 接收 ProcessedChannel，输出 ProcessedChannel。
-
-它不感知设备，只做"能力 → 能力"的变换。
-
-当前状态：
-
-未实现。
-
-架构已保证插入位置不改变数据流：
-StreamData → Channel → ProcessedChannel → [TransformLayer] → MappingEngine → OutputEvent
-
-未来新增 TransformLayer 不需要改动 MappingEngine 与数据流。
-10. Output 系统
-
-目录：
+xbox.left_x -> left_x
+xbox.a      -> button_a
+12. Output 系统
 
 output/
 
-10.1 VirtualXInput
-
-文件：
+12.1 VirtualXInput
 
 output/virtual_xinput.py
 
-作用：
+虚拟 Xbox 360 手柄（ViGEmBus / vgamepad）。
 
-创建虚拟 Xbox 360 手柄（ViGEmBus / vgamepad）。
+支持摇杆/扳机/按钮，注册游戏震动请求捕获。
+12.2 VirtualKeyboard
 
-支持：
+output/virtual_keyboard.py
 
-- 摇杆 / 扳机 / 按钮
-- 游戏震动请求捕获（通知回调）
-10.2 RealXInputOutput
+pynput 模拟按键。
 
-文件：
+目标：key_w / key_a / key_space / F1-F12 ...
+12.3 VirtualMouse
+
+output/virtual_mouse.py
+
+pynput 模拟鼠标。
+
+目标：mouse_x / mouse_y / scroll / click_*
+12.4 RealXInputOutput
 
 output/real_xinput.py
 
-作用：
-
-驱动真实 Xbox One 手柄。
-
-支持：
-
-- 震动马达（XInputSetState）
-10.3 OutputRouter
-
-文件：
+驱动真实 Xbox One 手柄震动马达（XInputSetState）。
+12.5 OutputRouter
 
 output/router.py
 
-作用：
+按 target 前缀路由：
 
-按 target 前缀路由输出。
-
-- xbox.* → 真实 Xbox One 手柄
-- 其他 → 虚拟 x360 手柄
-10.4 RequestHandler
-
-文件：
+key_*   → 虚拟键盘
+mouse_* → 虚拟鼠标
+xbox.*  → 真实 Xbox One
+其他    → 虚拟 x360
+12.6 RequestHandler
 
 output/request_handler.py
 
-作用：
+处理游戏请求（DeviceRequestEvent）：
 
-处理游戏发来的请求（DeviceRequestEvent）。
+已映射 → 路由到目标
+未映射 → 提示用户
+12.7 OutputDeviceInfo
 
-已映射 → 路由到目标。
+output/devices.py
 
-未映射 → 提示用户。
-
-11. Protocol 协议层
-
-目录：
+输出设备注册表（名称 + 功能列表），供 GUI 使用。
+13. Protocol 协议层
 
 protocols/
 
-当前：
-
-umi_protocol.py
-
-UMI: Universal Motion Interface
-
-serial_protocol.py
-
-配置化串口解析器。
-
-支持：
-
-- 自定义键映射（KEY=VALUE）
-- 可选帧处理（FRAME=）
-12. Package 插件系统
-
-目录：
+umi_protocol.py - UMI 格式（UMI_DATA motion.pitch=90）
+serial_protocol.py - 配置化串口解析（键映射 + 可选帧）
+14. Package 插件系统
 
 packages/
 
-作用：
+motion_demo  - 陀螺仪（motion.*）
+xbox_one     - Xbox 手柄（xbox.*，含输出马达）
+hid_generic  - 通用 USB HID（hid.*，通配）
+cycling      - BLE 骑行台（cycling.*）
+15. 客户端界面
 
-设备能力包。
-
-当前：
-
-CNX Motion Demo
-
-能力：motion.pitch / roll / yaw
-
-CNX Xbox One
-
-输入能力：摇杆 / 按钮 / 扳机
-
-输出能力：震动马达
-
-未来：
-
-bno085 / bike_trainer / steering_wheel / vr_tracker
-13. CLI 工具
-
-目录：
+15.1 CLI
 
 tools/cnx_cli.py
 
 命令：
 
+add-device / remove-device / list-available
 create-package
+auto-route
+map-capability / remove-mapping / list-mappings
+list-library / install-device
+15.2 GUI
 
-交互式创建能力包。
+tools/cnx_gui.py（tkinter）
 
-add-device
+菜单栏：系统 / 设备 / 映射 / 输出 / 帮助 / 语言
+设备功能树（设备 > 输入/输出分组 > 功能）
+双击功能映射
+中英文切换（tools/i18n.py）
+15.3 共享数据层
 
-交互式添加设备。
+tools/config_io.py（CLI 和 GUI 共用）
+16. 蓝牙扫描
 
-map-capability
+devices/bluetooth_scanner.py
 
-交互式映射能力到输出目标。
+list_paired_ble() - PnP 查询当前连接设备
+scan_ble() - BLE 广播扫描新设备
 
-list-mappings
+过滤系统内部服务，只显示真实设备。
+17. 当前已经完成
 
-查看当前映射。
-14. 当前已经完成
-
-V1.2.0 已完成：
+V1.3.0 已完成：
 
 架构
 
 ✅ EventBus（含双向事件）
-
-✅ Capability Registry
-
+✅ Capability Registry（含通配）
+✅ 传输控制（stream/state/edge）
 ✅ 设备识别（Detector + Library + Manager）
-
-✅ 多输入源合并
-
-✅ Stream 系统
-
-✅ Channel 系统
-
+✅ 连接抽象（serial/tcp/udp/bluetooth/custom）
+✅ 多输入源（Serial/XInput/HID/FTMS）
 ✅ Processor Pipeline
-
-✅ Mapping Engine
-
-✅ Output System（虚拟 + 真实 + 路由）
-
+✅ Mapping（gain / 回中 / 一键全路由）
+✅ 多输出设备（x360/键盘/鼠标/真实）
 ✅ 请求处理（未满足需求提示）
-
 ✅ CLI 工具
+✅ GUI（中英文）
 
 硬件
 
-✅ ESP32-S3 + BNO085 真实数据
-
+✅ ESP32-S3 + BNO085
 ✅ Xbox One 真实手柄
-
 ✅ 虚拟 Xbox 360 手柄（Windows 识别）
-
 ✅ 真实手柄震动马达
-15. 设计原则
-
-CapabilityNexus 不做：
-
-设备驱动集合
-
-而做：
-
-现实能力转换平台
-
-核心原则：
+✅ 蓝牙设备扫描
+18. 设计原则
 
 1. 核心框架稳定优先。
-
 2. 设备通过 Capability 接入。
-
 3. 不在 Core 中加入设备特殊逻辑。
-
 4. 新设备应该通过 Package 扩展。
-
 5. 所有模块通过 EventBus 通信。
-
 6. 不写死任何设备 / 功能。
-
 7. 未映射的能力不传输不处理。
-
 8. 游戏请求未满足时提醒用户。
-16. 下一阶段
+9. 中间层只转发值，不做设备语义猜测。
+10. 连接方式可插拔，主流内建 + 用户自定义。
+19. 下一阶段
 
-V1.3.0：
+V1.4.0：
 
-用户自定义设备完整流程
-
-映射配置交互
-
-GUI 界面
+映射表重构（一对多/多对一）
+Transform Layer 用户逻辑表
+设备库完整支持

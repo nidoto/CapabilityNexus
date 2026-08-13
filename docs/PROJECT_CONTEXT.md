@@ -89,6 +89,12 @@ right_x
 输出：震动马达 / 灯 / 其他
 
 
+输出不限定某一种设备：
+
+
+虚拟 x360 / 键盘 / 鼠标 / 真实设备 / 任意
+
+
 ---
 
 # 3. 当前版本
@@ -97,19 +103,21 @@ right_x
 当前版本：
 
 
-V1.2.0
+V1.3.0
 
 
 当前状态：
 
 
-真实硬件闭环完成
+传输模式完成
 
-多输入源合并完成
+一键全路由完成
 
-设备识别完成
+多输出设备完成
 
-双向设备输出完成
+GUI 完成（中英文）
+
+蓝牙扫描完成
 
 
 ---
@@ -124,9 +132,10 @@ V1.2.0
 
 
 - EventBus
-- Capability Registry
+- Capability Registry（含通配模式）
 - Stream 系统
 - 双向事件（OutputEvent / DeviceRequestEvent）
+- 传输控制（stream/state/edge）
 
 
 ---
@@ -137,7 +146,7 @@ V1.2.0
 支持：
 
 
-- 自动枚举（XInput / 串口 / USB）
+- 自动枚举（XInput / 串口 / USB HID / BLE）
 - 指纹匹配设备库（GitHub）
 - product（成品设备）自动装配
 - template（开发板）提示自定义
@@ -146,15 +155,37 @@ V1.2.0
 
 ---
 
-## 设备管理
+## 连接方式
 
 
 支持：
 
 
-- config/devices.json 配置
-- 自动识别 + 手动自定义
-- 协议配置化（键映射 + 帧）
+- serial（USB 串口）
+- tcp（有线/WiFi）
+- udp（低延迟网络）
+- bluetooth（RFCOMM）
+- hid（USB HID 手柄）
+- xinput（Xbox）
+- ftms（BLE 骑行台）
+- custom（用户自定义）
+
+
+统一连接抽象 LineConnection + 工厂。
+
+
+---
+
+## 输入源
+
+
+支持：
+
+
+- SerialDevice（ESP32 等）
+- XInputDevice（Xbox）
+- HIDDevice（pygame）
+- FTMSDevice（骑行台）
 
 
 ---
@@ -178,7 +209,9 @@ V1.2.0
 
 
 - 能力到输出映射
-- 映射到虚拟设备 或 真实设备
+- 增益（gain）
+- 回中策略（return_to_center）
+- 一键全路由（AutoRouter）
 - profiles/default.json
 
 
@@ -191,6 +224,8 @@ V1.2.0
 
 
 - VirtualXInput（虚拟 Xbox 360）
+- VirtualKeyboard（pynput）
+- VirtualMouse（pynput）
 - RealXInputOutput（真实 Xbox 马达）
 - OutputRouter（路由分发）
 - RequestHandler（游戏请求处理）
@@ -205,23 +240,25 @@ V1.2.0
 
 
 - packages/ 加载能力扩展
-- xbox_one（含输出能力）
-- motion_demo
+- motion_demo / xbox_one / hid_generic / cycling
 - CLI 引导创建自定义包
 
 
 ---
 
-## CLI 工具
+## 客户端界面
 
 
-tools/cnx_cli.py：
+CLI：
 
 
-- create-package
-- add-device
-- map-capability
-- list-mappings
+tools/cnx_cli.py
+
+
+GUI：
+
+
+tools/cnx_gui.py（tkinter，中英文）
 
 
 ---
@@ -229,79 +266,21 @@ tools/cnx_cli.py：
 # 5. 当前能力
 
 
-已有：
+已有能力命名空间：
 
 
-motion.pitch
+motion.*      - 陀螺仪（ESP32）
 
-motion.roll
+xbox.*        - Xbox One 手柄（含输出马达）
 
-motion.yaw
+hid.*         - 通用 USB HID
 
-
-来源：
-
-
-ESP32 + BNO085（CNX Motion Demo）
-
-
-xbox.left_x / left_y / right_x / right_y
-
-
-xbox.left_trigger / right_trigger
-
-
-xbox.a / b / x / y / lb / rb / ls / rs
-
-
-xbox.start / back / dpad_*
-
-
-xbox.motor_left / motor_right（输出）
-
-
-来源：
-
-
-Xbox One 真实手柄
+cycling.*     - BLE 骑行台
 
 
 ---
 
-# 6. 当前输入协议
-
-
-协议：
-
-
-UMI Protocol / 串口自定义协议
-
-
-串口格式（可配置）：
-
-
-FRAME=1
-
-X=12.50
-
-Y=-3.20
-
-R=0.10
-
-
-键映射可配置：
-
-
-X → motion.yaw
-
-Y → motion.pitch
-
-R → motion.roll
-
-
----
-
-# 7. 当前真实硬件
+# 6. 当前真实硬件
 
 
 已接入：
@@ -315,78 +294,42 @@ Xbox One 手柄（蓝牙 / XInput）
 
 ---
 
-# 8. 当前不要做的事情
+# 7. 未来方向
 
 
-暂时不要：
+## 映射表重构
 
 
-- 复杂校准算法
-- 高级滤波
-- 游戏专用逻辑
-- 设备专属硬编码
+一对多 / 多对一 / 设备间映射
 
 
-原因：
+## Transform Layer
 
 
-当前目标是完成通用框架。
+用户自定义逻辑表（长按/连按/条件触发）
 
 
----
-
-# 9. 未来方向
+## 设备库完整支持
 
 
-## VR
+自动下载 / 用户投稿
 
 
-能力：
+## 更多输出设备
 
 
-head.pitch
+虚拟 DS4 / 方向盘 / 飞行摇杆 / HID
 
-head.roll
 
-head.yaw
+## 更多输入源
+
+
+ANT+ 骑行台（需适配器）
 
 
 ---
 
-## 骑行
-
-
-能力：
-
-
-cycling.speed
-
-cycling.cadence
-
-cycling.power
-
-cycling.resistance
-
-cycling.steering
-
-
----
-
-## 模拟设备
-
-
-支持：
-
-
-- 方向盘
-- 飞行摇杆
-- 动感平台
-- 运动设备
-
-
----
-
-# 10. 修改项目规则
+# 8. 修改项目规则
 
 
 修改前：
@@ -415,16 +358,14 @@ ARCHITECTURE.md
 
 ---
 
-# 11. 下一阶段
+# 9. 下一阶段
 
 
-V1.3.0：
+V1.4.0：
 
 
-用户自定义设备完整流程
+映射表重构（一对多/多对一）
 
+Transform Layer 用户逻辑表
 
-映射配置交互
-
-
-GUI 界面
+设备库完整支持
