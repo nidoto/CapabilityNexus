@@ -1,4 +1,4 @@
-CapabilityNexus V1.0 系统架构说明
+CapabilityNexus V1.2.0 系统架构说明
 1. 项目定位
 
 CapabilityNexus 是一个通用现实输入能力转换框架。
@@ -6,6 +6,11 @@ CapabilityNexus 是一个通用现实输入能力转换框架。
 目标：
 
 将现实世界中的各种输入设备（IMU、骑行台、方向盘、手柄、动作捕捉设备等）的数据，转换成为游戏和软件可以理解的标准输入。
+
+设备是双向的：
+
+输入方向：设备产生能力。
+输出方向：设备接收请求（如震动马达）。
 
 核心思想：
 
@@ -26,11 +31,15 @@ CapabilityNexus 是一个通用现实输入能力转换框架。
 
 完整数据链：
 
-ESP32 / USB / Serial / Bluetooth
+ESP32 / Xbox One / USB / Serial / Bluetooth
               |
               |
               v
-        UMI Protocol
+        设备识别 (DeviceDetector + DeviceLibrary)
+              |
+              |
+              v
+        设备驱动 (SerialDevice / XInputDevice)
               |
               |
               v
@@ -58,16 +67,42 @@ ESP32 / USB / Serial / Bluetooth
               |
               |
               v
-       Output Event
+        Output Event
               |
               |
               v
-      Virtual Device
+        Output Router
               |
-              |
-              v
-          Game
-3. Core 核心模块
+      ┌───────┴───────┐
+      v               v
+  虚拟 x360      真实 Xbox One
+      |               |
+      v               v
+    游戏          震动马达
+3. 双向数据流
+
+游戏也会向虚拟设备发送请求（如震动反馈）。
+
+游戏
+    |
+    v
+虚拟 x360
+    |
+    v
+通知回调 (vgamepad)
+    |
+    v
+DeviceRequestEvent
+    |
+    v
+RequestHandler
+    |
+    v
+已映射？→ 路由到真实设备 / 另一虚拟设备
+    |
+    v
+未映射？→ 提示用户
+4. Core 核心模块
 
 目录：
 
@@ -75,7 +110,7 @@ core/
 
 负责整个系统基础通信。
 
-3.1 EventBus
+4.1 EventBus
 
 文件：
 
@@ -87,32 +122,13 @@ core/event_bus.py
 
 所有模块之间不直接调用。
 
-例如：
+支持两类事件：
 
-错误：
+- OutputEvent：输入方向（能力 → 输出）
+- DeviceRequestEvent：输出方向（游戏请求 → 设备）
+4.2 Capability Registry
 
-ESP32
-  ↓
-XInput
-
-正确：
-
-ESP32
- ↓
-StreamData
- ↓
-EventBus
- ↓
-各模块订阅
-
-优势：
-
-模块解耦
-易扩展
-支持插件
-4. Capability 能力系统
-
-目录：
+文件：
 
 core/capability_registry.py
 
@@ -120,69 +136,106 @@ core/capability_registry.py
 
 记录设备提供什么能力。
 
-例如：
-
-motion.pitch
-
-motion.roll
-
-motion.yaw
-
-表示：
-
-设备可以提供：
-
-前后倾斜
-左右倾斜
-水平旋转
-
-Capability 不关心：
-
-来自 ESP32
-来自骑行台
-来自 VR 设备
+Capability 不关心来源。
 
 它只描述：
 
 我有什么能力。
 
-5. Stream 数据流层
+能力分为：
+
+- 输入能力（轴 / 扳机 / 按钮）
+- 输出能力（震动马达 / 灯）
+5. 设备识别系统
+
+目录：
+
+devices/
+
+5.1 DeviceDetector
+
+文件：
+
+devices/detector.py
+
+作用：
+
+枚举系统设备，提取指纹。
+
+支持：
+
+- XInput 手柄槽位（0-3）
+- 串口（VID:PID + 描述）
+5.2 DeviceLibrary
+
+文件：
+
+devices/device_library.py
+
+作用：
+
+拉取设备库（GitHub raw），按指纹匹配。
+
+本地缓存，离线可用。
+
+指纹匹配规则：
+
+设备库声明什么字段，就检查什么字段。
+检测指纹的多余字段不影响匹配。
+5.3 设备分类
+
+product（成品设备）：
+
+指纹匹配 → 自动装配（如 Xbox One）。
+
+template（开发板模板）：
+
+指纹匹配 → 识别出板子 → 提示用户自定义能力
+（如 ESP32：可能是陀螺仪 / 压力计 / 温度计）。
+
+未知设备：
+
+提示用户手动添加（config/devices.json）。
+5.4 DeviceManager
+
+文件：
+
+devices/device_manager.py
+
+作用：
+
+装配设备。
+
+流程：
+
+1. 枚举设备
+2. 查设备库（auto 识别）
+3. 未命中 → 查 config/devices.json（手动配置）
+4. 构建驱动实例（SerialDevice / XInputDevice）
+6. Stream 数据流层
 
 相关文件：
 
 core/stream.py
 
 core/stream_adapter.py
+
 StreamData
 
-代表：
-
-原始输入数据。
+代表原始输入数据。
 
 例如：
 
 StreamData
 
-source:
-ESP32
+channel: motion.pitch
 
-channel:
-motion.pitch
+value: 90
 
-value:
-90
+StreamData 不处理校准、限幅、映射。
 
-StreamData 不处理：
-
-校准
-限幅
-游戏映射
-
-它只是：
-
-数据进入系统。
-
-6. Channel 数据标准化层
+它只是数据进入系统。
+7. Channel 数据标准化层
 
 文件：
 
@@ -192,30 +245,12 @@ core/channel.py
 
 把不同设备输入转换成统一格式。
 
-例如：
-
-ESP32:
-
-pitch=90
-
-骑行台：
-
-steer_angle=90
-
-VR：
-
-head_rotation=90
-
-最终：
-
 Channel
 
-id:
-motion.pitch
+id: motion.pitch
 
-value:
-90
-7. Processor 系统
+value: 90
+8. Processor 系统
 
 目录：
 
@@ -225,125 +260,27 @@ processors/
 
 数据处理流水线。
 
-当前支持：
+支持：
 
 Normalizer
 
-范围转换。
-
-例如：
-
-输入：
-
--180 ~ 180
-
-转换：
-
--32768 ~ 32767
-
-用于：
-
-Xbox XInput。
+范围转换（-180~180 → -32768~32767）。
 
 Deadzone
 
-死区处理。
+死区处理（滤除小范围抖动）。
 
-目的：
-
-减少：
-
-陀螺仪漂移
-传感器微震
-
-例如：
-
-value < 5
-
-=> 0
 Sensitivity
 
-灵敏度。
+灵敏度（input * 倍率）。
 
-例如：
-
-input * 2
 Clamp
 
-限制范围。
+限制输出范围。
 
-例如：
+配置：
 
-最大32767
-
-最小-32768
-Processor设计原则
-
-Processor 不属于设备。
-
-例如：
-
-错误：
-
-BNO085Processor
-
-正确：
-
-Normalizer
-Deadzone
-Clamp
-
-因为：
-
-未来：
-
-MPU6050
-BNO085
-BMI270
-
-都可以使用。
-
-8. ProcessedChannel
-
-文件：
-
-core/processed_channel.py
-
-代表：
-
-已经处理完成的数据。
-
-例如：
-
-输入：
-
-pitch=90
-
-经过：
-
-Normalizer
-Sensitivity
-Clamp
-
-得到：
-
-32767
-
-ProcessedChannel:
-
-id:
-
-motion.pitch
-
-
-value:
-
-32767
-
-
-processed:
-
-True
+config/processors.json
 9. Mapping Engine
 
 目录：
@@ -352,112 +289,76 @@ mapping/
 
 作用：
 
-能力 → 输出设备
-
-例如：
+能力 → 输出设备。
 
 配置：
 
-motion.pitch
+profiles/default.json
 
-↓
+支持两种目标：
 
-right_x
-
-意味着：
-
-现实：
-
-向前倾斜自行车
-
-↓
-
-游戏：
-
-右摇杆X轴
-
-Mapping 不关心：
-
-输入来源。
-
-它不知道：
-
-这是：
-
-ESP32
-骑行台
-VR
-
-只知道：
-
-能力名称。
-
+- 虚拟设备目标（right_x / button_a / left_trigger ...）
+- 真实设备目标（xbox.motor_left / xbox.motor_right ...）
 10. Output 系统
 
 目录：
 
 output/
 
-当前：
+10.1 VirtualXInput
 
-VirtualXInput
+文件：
+
+output/virtual_xinput.py
 
 作用：
 
-创建虚拟Xbox手柄。
+创建虚拟 Xbox 360 手柄（ViGEmBus / vgamepad）。
 
 支持：
 
-right_x
+- 摇杆 / 扳机 / 按钮
+- 游戏震动请求捕获（通知回调）
+10.2 RealXInputOutput
 
-right_y
+文件：
 
-left_trigger
-
-未来：
-
-可以增加：
-
-VirtualJoystick
-
-VirtualWheel
-
-VirtualVRController
-
-11. Package 插件系统
-
-目录：
-
-packages/
+output/real_xinput.py
 
 作用：
 
-设备能力包。
+驱动真实 Xbox One 手柄。
 
-例如：
+支持：
 
-当前：
+- 震动马达（XInputSetState）
+10.3 OutputRouter
 
-CNX Motion Demo
+文件：
 
-提供：
+output/router.py
 
-motion.pitch
+作用：
 
-motion.roll
+按 target 前缀路由输出。
 
-motion.yaw
+- xbox.* → 真实 Xbox One 手柄
+- 其他 → 虚拟 x360 手柄
+10.4 RequestHandler
 
-未来：
+文件：
 
-可以增加：
+output/request_handler.py
 
-packages/
-    bno085/
-    bike_trainer/
-    steering_wheel/
-    vr_tracker/
-12. Protocol 协议层
+作用：
+
+处理游戏发来的请求（DeviceRequestEvent）。
+
+已映射 → 路由到目标。
+
+未映射 → 提示用户。
+
+11. Protocol 协议层
 
 目录：
 
@@ -467,156 +368,102 @@ protocols/
 
 umi_protocol.py
 
-UMI:
+UMI: Universal Motion Interface
 
-Universal Motion Interface
+serial_protocol.py
 
-作用：
+配置化串口解析器。
 
-统一设备通信格式。
+支持：
 
-例如：
-
-ESP32发送：
-
-UMI_DATA motion.pitch=90
-
-解析：
-
-StreamData
-
-未来支持：
-
-USB:
-
-UMI USB
-
-Bluetooth:
-
-UMI BLE
-
-WiFi:
-
-UMI TCP
-13. Device 层
+- 自定义键映射（KEY=VALUE）
+- 可选帧处理（FRAME=）
+12. Package 插件系统
 
 目录：
 
-devices/
+packages/
+
+作用：
+
+设备能力包。
 
 当前：
 
-serial_device.py
+CNX Motion Demo
 
-负责：
+能力：motion.pitch / roll / yaw
 
-真实硬件连接。
+CNX Xbox One
 
-例如：
+输入能力：摇杆 / 按钮 / 扳机
 
-ESP32:
+输出能力：震动马达
 
-COM5
+未来：
 
-115200
+bno085 / bike_trainer / steering_wheel / vr_tracker
+13. CLI 工具
 
-当前：
+目录：
 
-测试阶段关闭：
+tools/cnx_cli.py
 
-# serial_device.connect()
+命令：
 
-等 ESP32 接入后开启。
+create-package
 
+交互式创建能力包。
+
+add-device
+
+交互式添加设备。
+
+map-capability
+
+交互式映射能力到输出目标。
+
+list-mappings
+
+查看当前映射。
 14. 当前已经完成
 
-V1.0 已完成：
+V1.2.0 已完成：
 
 架构
 
-✅ EventBus
+✅ EventBus（含双向事件）
 
 ✅ Capability Registry
 
-✅ Package System
+✅ 设备识别（Detector + Library + Manager）
 
-✅ Stream System
+✅ 多输入源合并
 
-✅ Channel System
+✅ Stream 系统
+
+✅ Channel 系统
 
 ✅ Processor Pipeline
 
 ✅ Mapping Engine
 
-✅ Output System
+✅ Output System（虚拟 + 真实 + 路由）
 
-软件测试
+✅ 请求处理（未满足需求提示）
 
-已完成：
+✅ CLI 工具
 
-模拟输入:
+硬件
 
-UMI_DATA motion.pitch=90
+✅ ESP32-S3 + BNO085 真实数据
 
+✅ Xbox One 真实手柄
 
-成功:
+✅ 虚拟 Xbox 360 手柄（Windows 识别）
 
-StreamData
-
-↓
-
-Channel
-
-↓
-
-ProcessedChannel
-
-↓
-
-Mapping
-
-↓
-
-OutputEvent
-
-↓
-
-VirtualXInput
-
-输出：
-
-[XInput] right_x = 32766
-15. 当前未完成
-硬件连接
-
-下一阶段：
-
-ESP32
-
-↓
-
-Serial/BLE
-
-↓
-
-UMI Protocol
-
-真实传感器
-
-未接入：
-
-BNO085
-MPU6050
-BMI270
-游戏测试
-
-未开始：
-
-GTA5
-骑行MOD
-VR游戏
-模拟驾驶
-16. 设计原则
+✅ 真实手柄震动马达
+15. 设计原则
 
 CapabilityNexus 不做：
 
@@ -626,77 +473,29 @@ CapabilityNexus 不做：
 
 现实能力转换平台
 
-例如：
+核心原则：
 
-自行车：
+1. 核心框架稳定优先。
 
-真实倾斜
+2. 设备通过 Capability 接入。
 
-↓
+3. 不在 Core 中加入设备特殊逻辑。
 
-motion.roll
+4. 新设备应该通过 Package 扩展。
 
-↓
+5. 所有模块通过 EventBus 通信。
 
-right_x
+6. 不写死任何设备 / 功能。
 
-↓
+7. 未映射的能力不传输不处理。
 
-游戏转向
+8. 游戏请求未满足时提醒用户。
+16. 下一阶段
 
-VR：
+V1.3.0：
 
-头部旋转
+用户自定义设备完整流程
 
-↓
+映射配置交互
 
-motion.yaw
-
-↓
-
-camera rotation
-
-骑行台：
-
-速度
-
-踏频
-
-阻力
-
-↓
-
-game input
-17. V1.0 当前状态总结
-
-当前版本：
-
-CapabilityNexus V1.0
-
-完成：
-
-软件核心框架。
-
-状态：
-
-模拟输入 OK
-
-虚拟Xbox输出 OK
-
-数据处理 OK
-
-映射 OK
-
-
-等待:
-
-真实设备
-
-这个 ARCHITECTURE.md 和前面的 PROJECT_CONTEXT.md 配合后，新 GPT 基本可以理解：
-
-我们做的是什么
-为什么这么设计
-当前代码结构
-下一步应该接 ESP32
-
-下一条我发送第三个：
+GUI 界面
