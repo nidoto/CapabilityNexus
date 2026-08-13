@@ -7,52 +7,85 @@ from tkinter import ttk
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools import config_io
+from tools.i18n import I18n
 
 
 class CapabilityNexusGUI:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("CapabilityNexus")
+        self.i18n = I18n("zh")
+
+        self.root.title(self.t("app_title"))
         self.root.geometry("1000x650")
+
+        self._build_menubar()
+        self._build_layout()
+
+        self.refresh_devices()
+
+    def t(self, key):
+        return self.i18n.t(key)
+
+    def _rebuild(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
 
         self._build_menubar()
         self._build_layout()
         self.refresh_devices()
 
+    #
+    # Menu bar
+    #
+
     def _build_menubar(self):
         menubar = tk.Menu(self.root)
 
         settings_menu = tk.Menu(menubar, tearoff=0)
-        settings_menu.add_command(label="Preferences...", command=self.show_preferences)
+        settings_menu.add_command(label=self.t("menu_preferences"), command=self.show_preferences)
         settings_menu.add_separator()
-        settings_menu.add_command(label="Exit", command=self.root.quit)
-        menubar.add_cascade(label="System", menu=settings_menu)
+        settings_menu.add_command(label=self.t("menu_exit"), command=self.root.quit)
+        menubar.add_cascade(label=self.t("menu_system"), menu=settings_menu)
 
         devices_menu = tk.Menu(menubar, tearoff=0)
-        devices_menu.add_command(label="Add Device...", command=self.add_device_dialog)
-        devices_menu.add_command(label="Install from Library...", command=self.install_from_library)
+        devices_menu.add_command(label=self.t("menu_add_device"), command=self.add_device_dialog)
+        devices_menu.add_command(label=self.t("menu_install_library"), command=self.install_from_library)
         devices_menu.add_separator()
-        devices_menu.add_command(label="Refresh", command=self.refresh_devices)
-        menubar.add_cascade(label="Devices", menu=devices_menu)
+        devices_menu.add_command(label=self.t("menu_refresh"), command=self.refresh_devices)
+        menubar.add_cascade(label=self.t("menu_devices"), menu=devices_menu)
 
         mappings_menu = tk.Menu(menubar, tearoff=0)
-        mappings_menu.add_command(label="Auto-Route Selected", command=self.auto_route)
-        mappings_menu.add_command(label="Remove Mapping...", command=self.remove_mapping)
+        mappings_menu.add_command(label=self.t("menu_auto_route"), command=self.auto_route)
+        mappings_menu.add_command(label=self.t("menu_remove_mapping"), command=self.remove_mapping)
         mappings_menu.add_separator()
-        mappings_menu.add_command(label="View Mappings", command=self.refresh_mappings)
-        menubar.add_cascade(label="Mappings", menu=mappings_menu)
+        mappings_menu.add_command(label=self.t("menu_view_mappings"), command=self.refresh_mappings)
+        menubar.add_cascade(label=self.t("menu_mappings"), menu=mappings_menu)
 
         output_menu = tk.Menu(menubar, tearoff=0)
-        output_menu.add_command(label="Output Devices", command=self.show_output_devices)
-        menubar.add_cascade(label="Output", menu=output_menu)
+        output_menu.add_command(label=self.t("menu_output_devices"), command=self.show_output_devices)
+        menubar.add_cascade(label=self.t("menu_output"), menu=output_menu)
 
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="About", command=self.show_about)
-        help_menu.add_command(label="Help", command=self.show_help)
-        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label=self.t("menu_about"), command=self.show_about)
+        help_menu.add_command(label=self.t("menu_help_item"), command=self.show_help)
+        menubar.add_cascade(label=self.t("menu_help"), menu=help_menu)
+
+        lang_menu = tk.Menu(menubar, tearoff=0)
+        lang_menu.add_command(label="中文", command=lambda: self._switch_lang("zh"))
+        lang_menu.add_command(label="English", command=lambda: self._switch_lang("en"))
+        menubar.add_cascade(label=self.t("menu_language"), menu=lang_menu)
 
         self.root.config(menu=menubar)
+
+    def _switch_lang(self, lang):
+        self.i18n.set_language(lang)
+        self.root.title(self.t("app_title"))
+        self._rebuild()
+
+    #
+    # Layout
+    #
 
     def _build_layout(self):
         main = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
@@ -68,23 +101,23 @@ class CapabilityNexusGUI:
         self._build_log_panel(self.root)
 
     def _build_device_tree(self, parent):
-        box = ttk.LabelFrame(parent, text="Input Devices")
+        box = ttk.LabelFrame(parent, text=self.t("tree_devices"))
         box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         self.device_tree = ttk.Treeview(box, columns=("func",), show="tree headings")
-        self.device_tree.heading("#0", text="Device / Function")
-        self.device_tree.heading("func", text="Type")
+        self.device_tree.heading("#0", text=self.t("tree_device_function"))
+        self.device_tree.heading("func", text=self.t("tree_type"))
         self.device_tree.column("func", width=120)
         self.device_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
         self.device_tree.bind("<Double-1>", self._on_tree_double_click)
         self.device_tree.bind("<Return>", self._on_tree_double_click)
 
-        hint = ttk.Label(box, text="Double-click a function to map it to an output")
+        hint = ttk.Label(box, text=self.t("tree_hint"))
         hint.pack(pady=4)
 
     def _build_mapping_panel(self, parent):
-        box = ttk.LabelFrame(parent, text="Current Mappings")
+        box = ttk.LabelFrame(parent, text=self.t("panel_mappings"))
         box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         self.map_text = tk.Text(box, state=tk.DISABLED)
@@ -92,10 +125,10 @@ class CapabilityNexusGUI:
 
         btns = ttk.Frame(box)
         btns.pack(fill=tk.X, padx=6, pady=4)
-        ttk.Button(btns, text="Remove Selected Mapping", command=self.remove_mapping).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btns, text=self.t("panel_remove_mapping"), command=self.remove_mapping).pack(side=tk.LEFT, padx=2)
 
     def _build_log_panel(self, parent):
-        logbox = ttk.LabelFrame(parent, text="Log")
+        logbox = ttk.LabelFrame(parent, text=self.t("panel_log"))
         logbox.pack(fill=tk.X, padx=8, pady=(0, 8))
 
         self.log_text = tk.Text(logbox, height=6, state=tk.DISABLED)
@@ -136,7 +169,7 @@ class CapabilityNexusGUI:
                 input_node = self.device_tree.insert(
                     device_node,
                     tk.END,
-                    text="Input",
+                    text=self.t("tree_input"),
                     values=("group",),
                     open=True,
                 )
@@ -153,7 +186,7 @@ class CapabilityNexusGUI:
                 output_node = self.device_tree.insert(
                     device_node,
                     tk.END,
-                    text="Output",
+                    text=self.t("tree_output"),
                     values=("group",),
                     open=True,
                 )
@@ -196,10 +229,10 @@ class CapabilityNexusGUI:
 
     def _open_map_dialog(self, source):
         dialog = tk.Toplevel(self.root)
-        dialog.title(f"Map: {source}")
+        dialog.title(f"{self.t('dlg_map_title')}: {source}")
         dialog.geometry("480x460")
 
-        ttk.Label(dialog, text=f"Map input:  {source}").pack(padx=8, pady=8)
+        ttk.Label(dialog, text=f"{self.t('dlg_map_prompt')}:  {source}").pack(padx=8, pady=8)
 
         profile = config_io.load_profile()
         mappings = profile.get("mappings", {})
@@ -210,11 +243,11 @@ class CapabilityNexusGUI:
             current_desc = config_io.mapping_desc(current)
             ttk.Label(
                 dialog,
-                text=f"Currently: {current_desc}",
+                text=f"{self.t('dlg_map_current')}: {current_desc}",
                 foreground="#4caf50",
             ).pack(padx=8)
 
-        ttk.Label(dialog, text="Output device:").pack(padx=8, pady=(10, 2))
+        ttk.Label(dialog, text=self.t("dlg_output_device")).pack(padx=8, pady=(10, 2))
 
         from output.devices import OUTPUT_DEVICES
 
@@ -228,7 +261,7 @@ class CapabilityNexusGUI:
                 value=device.id,
             ).pack(anchor=tk.W, padx=16)
 
-        ttk.Label(dialog, text="Output function:").pack(padx=8, pady=(10, 2))
+        ttk.Label(dialog, text=self.t("dlg_output_function")).pack(padx=8, pady=(10, 2))
 
         target_var = tk.StringVar()
 
@@ -265,16 +298,16 @@ class CapabilityNexusGUI:
 
         gain_frame = ttk.Frame(dialog)
         gain_frame.pack(fill=tk.X, padx=8, pady=6)
-        ttk.Label(gain_frame, text="Gain:").pack(side=tk.LEFT)
+        ttk.Label(gain_frame, text=self.t("dlg_gain")).pack(side=tk.LEFT)
         gain_var = tk.StringVar(value="1.0")
         ttk.Entry(gain_frame, textvariable=gain_var, width=8).pack(side=tk.LEFT, padx=6)
         return_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(gain_frame, text="Return to center", variable=return_var).pack(side=tk.LEFT, padx=10)
+        ttk.Checkbutton(gain_frame, text=self.t("dlg_return_center"), variable=return_var).pack(side=tk.LEFT, padx=10)
 
         def apply():
             target = target_var.get()
             if not target:
-                messagebox.showwarning("No target", "Select an output function")
+                messagebox.showwarning(self.t("dlg_no_target"), self.t("dlg_no_target_msg"))
                 return
 
             try:
@@ -291,10 +324,10 @@ class CapabilityNexusGUI:
             config_io.save_profile(profile)
 
             self.refresh_mappings()
-            self.log(f"Mapped {source} -> {target}")
+            self.log(f"{self.t('log_mapped')} {source} -> {target}")
             dialog.destroy()
 
-        ttk.Button(dialog, text="Apply", command=apply).pack(padx=8, pady=10)
+        ttk.Button(dialog, text=self.t("dlg_apply"), command=apply).pack(padx=8, pady=10)
 
     def remove_mapping(self):
         profile = config_io.load_profile()
@@ -307,7 +340,7 @@ class CapabilityNexusGUI:
         sources = list(mappings.keys())
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Remove Mapping")
+        dialog.title(self.t("menu_remove_mapping"))
         dialog.geometry("360x400")
 
         ttk.Label(dialog, text="Select mapping to remove:").pack(padx=8, pady=8)
@@ -331,10 +364,10 @@ class CapabilityNexusGUI:
             config_io.save_profile(profile)
 
             self.refresh_mappings()
-            self.log(f"Removed mapping: {source}")
+            self.log(f"{self.t('log_removed_mapping')}: {source}")
             dialog.destroy()
 
-        ttk.Button(dialog, text="Remove", command=do_remove).pack(padx=8, pady=8)
+        ttk.Button(dialog, text=self.t("dlg_apply"), command=do_remove).pack(padx=8, pady=8)
 
     #
     # Auto-route
@@ -395,7 +428,7 @@ class CapabilityNexusGUI:
         config_io.save_profile(profile)
 
         self.refresh_devices()
-        self.log(f"Auto-routed {len(mappings)} capabilities for {device.get('name')}")
+        self.log(f"{self.t('log_auto_routed')} {len(mappings)}: {device.get('name')}")
 
         if outputs:
             self.log("Outputs not covered (need manual route):")
@@ -403,52 +436,143 @@ class CapabilityNexusGUI:
                 self.log(f"  {out.get('id')}")
 
     #
-    # Menus
+    # Add device
     #
 
     def add_device_dialog(self):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Add Device")
-        dialog.geometry("420x360")
+        dialog.title(self.t("dlg_add_title"))
+        dialog.geometry("460x440")
 
-        ttk.Label(dialog, text="Name").pack(padx=8, pady=4)
+        ttk.Label(dialog, text=self.t("dlg_name")).pack(padx=8, pady=4)
         name_var = tk.StringVar()
         ttk.Entry(dialog, textvariable=name_var).pack(fill=tk.X, padx=8)
 
-        ttk.Label(dialog, text="Driver (serial/xinput/hid/ftms)").pack(padx=8, pady=4)
-        driver_var = tk.StringVar(value="serial")
-        ttk.Entry(dialog, textvariable=driver_var).pack(fill=tk.X, padx=8)
+        ttk.Label(dialog, text=self.t("dlg_conn_type")).pack(padx=8, pady=(10, 2))
+        conn_var = tk.StringVar(value="serial")
 
-        ttk.Label(dialog, text="Package (folder in packages/)").pack(padx=8, pady=4)
+        conn_options = [
+            ("serial", "USB / Serial"),
+            ("hid", "USB HID (gamepad/wheel)"),
+            ("xinput", "XInput (Xbox)"),
+            ("tcp", "Network / WiFi (TCP)"),
+            ("udp", "Network / WiFi (UDP)"),
+            ("bluetooth", "Bluetooth (RFCOMM)"),
+            ("ftms", "Bluetooth (BLE Trainer)"),
+            ("custom", "Custom connection"),
+        ]
+
+        conn_combo = ttk.Combobox(
+            dialog,
+            textvariable=conn_var,
+            values=[label for _key, label in conn_options],
+            state="readonly",
+        )
+        conn_combo.pack(fill=tk.X, padx=8)
+
+        conn_map = {label: key for key, label in conn_options}
+
+        fields_frame = ttk.Frame(dialog)
+        fields_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
+
+        field_vars = {}
+
+        def build_fields(conn_key):
+            for widget in fields_frame.winfo_children():
+                widget.destroy()
+
+            field_vars.clear()
+
+            if conn_key == "serial":
+                field_vars["port"] = self._add_field(fields_frame, self.t("dlg_serial_port"), "COM3")
+                field_vars["baudrate"] = self._add_field(fields_frame, self.t("dlg_baudrate"), "115200")
+            elif conn_key == "tcp":
+                field_vars["host"] = self._add_field(fields_frame, self.t("dlg_host"), "192.168.1.100")
+                field_vars["port"] = self._add_field(fields_frame, self.t("dlg_port"), "8888")
+            elif conn_key == "udp":
+                field_vars["host"] = self._add_field(fields_frame, self.t("dlg_host"), "0.0.0.0")
+                field_vars["port"] = self._add_field(fields_frame, self.t("dlg_port"), "8888")
+            elif conn_key == "bluetooth":
+                field_vars["device"] = self._add_field(fields_frame, self.t("dlg_bluetooth_dev"), "COM4")
+                field_vars["channel"] = self._add_field(fields_frame, self.t("dlg_channel"), "1")
+            elif conn_key == "hid":
+                field_vars["index"] = self._add_field(fields_frame, "Joystick index", "0")
+            elif conn_key == "ftms":
+                field_vars["address"] = self._add_field(fields_frame, "BLE address (optional)", "")
+
+        def on_conn_change(*_args):
+            build_fields(conn_map[conn_var.get()])
+
+        conn_combo.bind("<<ComboboxSelected>>", on_conn_change)
+        build_fields("serial")
+
+        ttk.Label(dialog, text=self.t("dlg_package")).pack(padx=8, pady=4)
         pkg_var = tk.StringVar(value="motion_demo")
         ttk.Entry(dialog, textvariable=pkg_var).pack(fill=tk.X, padx=8)
 
-        ttk.Label(dialog, text="Serial port (for serial)").pack(padx=8, pady=4)
-        port_var = tk.StringVar(value="COM3")
-        ttk.Entry(dialog, textvariable=port_var).pack(fill=tk.X, padx=8)
-
         def save():
+            conn_key = conn_map[conn_var.get()]
+
+            driver = conn_key
+
+            if conn_key in ("tcp", "udp", "bluetooth", "custom"):
+                driver = "serial"
+
             entry = {
                 "name": name_var.get() or "New Device",
-                "driver": driver_var.get(),
+                "driver": driver,
                 "package": pkg_var.get(),
             }
 
-            if driver_var.get() == "serial":
+            if conn_key == "serial":
                 entry["connection"] = {
                     "type": "serial",
-                    "port": port_var.get(),
-                    "baudrate": 115200,
+                    "port": field_vars["port"].get(),
+                    "baudrate": int(field_vars["baudrate"].get() or 115200),
                 }
+            elif conn_key == "tcp":
+                entry["connection"] = {
+                    "type": "tcp",
+                    "host": field_vars["host"].get(),
+                    "port": int(field_vars["port"].get() or 8888),
+                }
+            elif conn_key == "udp":
+                entry["connection"] = {
+                    "type": "udp",
+                    "host": field_vars["host"].get(),
+                    "port": int(field_vars["port"].get() or 8888),
+                }
+            elif conn_key == "bluetooth":
+                entry["connection"] = {
+                    "type": "bluetooth",
+                    "device": field_vars["device"].get(),
+                    "channel": int(field_vars["channel"].get() or 1),
+                }
+            elif conn_key == "hid":
+                entry["driver"] = "hid"
+                entry["index"] = int(field_vars["index"].get() or 0)
+            elif conn_key == "ftms":
+                entry["driver"] = "ftms"
+                if field_vars["address"].get():
+                    entry["address"] = field_vars["address"].get()
 
             data = config_io.load_config()
             data["devices"].append(entry)
             config_io.save_config(data)
 
             self.refresh_devices()
+            self.log(f"{self.t('log_added_device')}: {entry.get('name')}")
             dialog.destroy()
 
-        ttk.Button(dialog, text="Save", command=save).pack(padx=8, pady=8)
+        ttk.Button(dialog, text=self.t("dlg_save"), command=save).pack(padx=8, pady=10)
+
+    def _add_field(self, parent, label, default):
+        frame = ttk.Frame(parent)
+        frame.pack(fill=tk.X, pady=2)
+        ttk.Label(frame, text=label, width=22).pack(side=tk.LEFT)
+        var = tk.StringVar(value=default)
+        ttk.Entry(frame, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        return var
 
     def install_from_library(self):
         try:
@@ -469,7 +593,7 @@ class CapabilityNexusGUI:
             return
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Install from Library")
+        dialog.title(self.t("menu_install_library"))
         dialog.geometry("460x300")
 
         ttk.Label(dialog, text="Select device to install:").pack(padx=8, pady=8)
@@ -519,23 +643,13 @@ class CapabilityNexusGUI:
             self.log(f"Installed: {downloaded.get('name')}")
             dialog.destroy()
 
-        ttk.Button(dialog, text="Install", command=do_install).pack(padx=8, pady=8)
-
-    def show_preferences(self):
-        messagebox.showinfo(
-            "Preferences",
-            "Settings are stored in:\n\n"
-            "  config/devices.json   - connected devices\n"
-            "  profiles/default.json - mappings\n"
-            "  config/processors.json - processor pipelines\n\n"
-            "These JSON files can be edited directly.",
-        )
+        ttk.Button(dialog, text=self.t("dlg_apply"), command=do_install).pack(padx=8, pady=8)
 
     def show_output_devices(self):
         from output.devices import OUTPUT_DEVICES
 
         dialog = tk.Toplevel(self.root)
-        dialog.title("Output Devices")
+        dialog.title(self.t("menu_output_devices"))
         dialog.geometry("460x420")
 
         ttk.Label(dialog, text="Available virtual output devices:").pack(padx=8, pady=8)
@@ -548,25 +662,14 @@ class CapabilityNexusGUI:
             text.insert(tk.END, f"{device.name}\n  {device.description}\n\n")
         text.config(state=tk.DISABLED)
 
+    def show_preferences(self):
+        messagebox.showinfo(self.t("prefs_title"), self.t("prefs_body"))
+
     def show_about(self):
-        messagebox.showinfo(
-            "About CapabilityNexus",
-            "CapabilityNexus\n\n"
-            "Real-world input abstraction framework.\n"
-            "Map any device capability to any virtual output.\n\n"
-            "Open source - https://github.com/nidoto/CapabilityNexus",
-        )
+        messagebox.showinfo(self.t("about_title"), self.t("about_body"))
 
     def show_help(self):
-        messagebox.showinfo(
-            "Help",
-            "How to use:\n\n"
-            "1. Devices > Add Device - add your input device\n"
-            "2. Double-click a device function in the tree\n"
-            "3. Choose an output device (X360/Keyboard/Mouse)\n"
-            "4. Choose the output function, click Apply\n\n"
-            "Use Mappings > Auto-Route for one-click default mapping.",
-        )
+        messagebox.showinfo(self.t("help_title"), self.t("help_body"))
 
     #
     # Log
