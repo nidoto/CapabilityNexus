@@ -57,16 +57,21 @@ class CapabilityNexusGUI:
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
     def _build_mapping_panel(self, parent):
-        top = ttk.LabelFrame(parent, text="Capabilities")
+        top = ttk.LabelFrame(parent, text="Virtual X360 - click a channel to map")
         top.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.cap_list = tk.Listbox(top, height=10)
-        self.cap_list.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        from tools.pad_widget import VirtualPadWidget
 
-        cap_btns = ttk.Frame(top)
-        cap_btns.pack(fill=tk.X, padx=6, pady=4)
-        ttk.Button(cap_btns, text="Map to Target...", command=self.map_capability_dialog).pack(side=tk.LEFT, padx=2)
-        ttk.Button(cap_btns, text="Unmap", command=self.unmap_capability).pack(side=tk.LEFT, padx=2)
+        self.pad = VirtualPadWidget(
+            top,
+            on_channel_click=self.on_channel_click,
+        )
+
+        hint = ttk.Label(
+            top,
+            text="Click a button / stick / trigger to assign which input drives it",
+        )
+        hint.pack(pady=4)
 
         bottom = ttk.LabelFrame(parent, text="Current Mappings")
         bottom.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
@@ -74,6 +79,105 @@ class CapabilityNexusGUI:
         self.map_text = tk.Text(bottom, height=8, state=tk.DISABLED)
         self.map_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
+    def on_channel_click(self, channel_id):
+        self._open_map_dialog(channel_id)
+
+    def _open_map_dialog(self, channel_id):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Map to {channel_id}")
+        dialog.geometry("460x420")
+
+        ttk.Label(dialog, text=f"Which input should drive:  {channel_id}?").pack(
+            padx=8, pady=8,
+        )
+
+        profile = config_io.load_profile()
+        mapped = profile.get("mappings", {})
+
+        current_source = None
+        for src, mapping in mapped.items():
+            tgt = mapping if isinstance(mapping, str) else mapping.get("target")
+            if tgt == channel_id:
+                current_source = src
+                break
+
+        if current_source:
+            ttk.Label(
+                dialog,
+                text=f"Currently: {current_source} -> {channel_id}",
+                foreground="#4caf50",
+            ).pack(padx=8)
+
+        ttk.Label(dialog, text="Available inputs:").pack(padx=8, pady=(10, 2))
+
+        list_frame = ttk.Frame(dialog)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.map_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set)
+        self.map_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.map_list.yview)
+
+        packages = config_io.list_package_capabilities()
+        inputs = []
+
+        for pkg, info in packages.items():
+            for cap in info["capabilities"]:
+                inputs.append(cap)
+                self.map_list.insert(tk.END, f"{cap}  ({pkg})")
+
+        self.map_list.insert(tk.END, "(unmap / no mapping)")
+        inputs.append(None)
+
+        def apply_selection():
+            index = self.map_list.curselection()
+
+            if not index:
+                return
+
+            source = inputs[index[0]]
+
+            profile = config_io.load_profile()
+            mappings = profile.get("mappings", {})
+
+            if source is None:
+                for src in list(mappings.keys()):
+                    m = mappings[src]
+                    tgt = m if isinstance(m, str) else m.get("target")
+                    if tgt == channel_id:
+                        del mappings[src]
+            else:
+                if current_source and current_source != source:
+                    del mappings[current_source]
+
+                mappings[source] = {
+                    "target": channel_id,
+                    "gain": 1.0,
+                    "return_to_center": False,
+                }
+
+            profile["mappings"] = mappings
+            config_io.save_profile(profile)
+
+            self.refresh_mappings()
+            self.log(f"Mapped {source} -> {channel_id}" if source else f"Unmapped {channel_id}")
+            dialog.destroy()
+
+        ttk.Button(dialog, text="Apply", command=apply_selection).pack(padx=8, pady=8)
+
+    def refresh_mappings(self):
+        profile = config_io.load_profile()
+
+        self.map_text.config(state=tk.NORMAL)
+        self.map_text.delete("1.0", tk.END)
+        for source, mapping in profile.get("mappings", {}).items():
+            self.map_text.insert(tk.END, f"{source} -> {config_io.mapping_desc(mapping)}\n")
+        self.map_text.config(state=tk.DISABLED)
+
+    #
+    # Log
     #
     # Devices
     #
@@ -262,92 +366,6 @@ class CapabilityNexusGUI:
             self.log("Outputs not covered (need manual route):")
             for out in outputs:
                 self.log(f"  {out.get('id')}")
-
-    #
-    # Mappings
-    #
-
-    def refresh_mappings(self):
-        self.cap_list.delete(0, tk.END)
-
-        packages = config_io.list_package_capabilities()
-        profile = config_io.load_profile()
-        mapped = set(profile.get("mappings", {}).keys())
-
-        for pkg, info in packages.items():
-            for cap in info["capabilities"]:
-                status = " [mapped]" if cap in mapped else ""
-                self.cap_list.insert(tk.END, f"{cap}{status}  ({pkg})")
-
-        self.map_text.config(state=tk.NORMAL)
-        self.map_text.delete("1.0", tk.END)
-        for source, mapping in profile.get("mappings", {}).items():
-            self.map_text.insert(tk.END, f"{source} -> {config_io.mapping_desc(mapping)}\n")
-        self.map_text.config(state=tk.DISABLED)
-
-    def map_capability_dialog(self):
-        selection = self.cap_list.curselection()
-        if not selection:
-            return
-
-        line = self.cap_list.get(selection[0])
-        source = line.split("  (")[0]
-        source = source.replace(" [mapped]", "")
-
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Map Capability")
-        dialog.geometry("360x220")
-
-        ttk.Label(dialog, text=f"Source: {source}").pack(padx=8, pady=4)
-
-        ttk.Label(dialog, text="Target (e.g. right_x, button_a, xbox.motor_left):").pack(padx=8, pady=4)
-        target_var = tk.StringVar(value="right_x")
-        ttk.Entry(dialog, textvariable=target_var).pack(fill=tk.X, padx=8)
-
-        ttk.Label(dialog, text="Gain (default 1.0):").pack(padx=8, pady=4)
-        gain_var = tk.StringVar(value="1.0")
-        ttk.Entry(dialog, textvariable=gain_var).pack(fill=tk.X, padx=8)
-
-        return_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(dialog, text="Return to center", variable=return_var).pack(padx=8, pady=4)
-
-        def save():
-            profile = config_io.load_profile()
-            try:
-                gain = float(gain_var.get())
-            except ValueError:
-                gain = 1.0
-
-            profile["mappings"][source] = {
-                "target": target_var.get(),
-                "gain": gain,
-                "return_to_center": return_var.get(),
-            }
-            config_io.save_profile(profile)
-            self.refresh_mappings()
-            self.log(f"Mapped {source} -> {target_var.get()}")
-            dialog.destroy()
-
-        ttk.Button(dialog, text="Save", command=save).pack(padx=8, pady=8)
-
-    def unmap_capability(self):
-        selection = self.cap_list.curselection()
-        if not selection:
-            return
-
-        line = self.cap_list.get(selection[0])
-        source = line.split("  (")[0]
-        source = source.replace(" [mapped]", "")
-
-        profile = config_io.load_profile()
-        mappings = profile.get("mappings", {})
-
-        if source in mappings:
-            del mappings[source]
-            profile["mappings"] = mappings
-            config_io.save_profile(profile)
-            self.refresh_mappings()
-            self.log(f"Unmapped {source}")
 
     #
     # Log
