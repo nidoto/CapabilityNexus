@@ -68,8 +68,13 @@ class DeviceManager:
                     print("[DeviceManager] Matched config:", config_entry.get("name"))
                 else:
                     print(
-                        "[DeviceManager] Unknown device, skip:",
+                        "[DeviceManager] Unknown device:",
                         d.get("description", d.get("type")),
+                    )
+                    print(
+                        "[DeviceManager]   Add it manually in",
+                        self.config_path,
+                        "e.g. custom development boards (ESP32/Raspberry Pi)",
                     )
 
         return resolved
