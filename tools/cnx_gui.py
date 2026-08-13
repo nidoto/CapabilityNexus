@@ -442,12 +442,9 @@ class CapabilityNexusGUI:
     def add_device_dialog(self):
         dialog = tk.Toplevel(self.root)
         dialog.title(self.t("dlg_add_title"))
-        dialog.geometry("460x440")
+        dialog.geometry("520x520")
 
-        ttk.Label(dialog, text=self.t("dlg_name")).pack(padx=8, pady=4)
-        name_var = tk.StringVar()
-        ttk.Entry(dialog, textvariable=name_var).pack(fill=tk.X, padx=8)
-
+        # 连接方式
         ttk.Label(dialog, text=self.t("dlg_conn_type")).pack(padx=8, pady=(10, 2))
         conn_var = tk.StringVar(value="serial")
 
@@ -472,47 +469,105 @@ class CapabilityNexusGUI:
 
         conn_map = {label: key for key, label in conn_options}
 
-        fields_frame = ttk.Frame(dialog)
-        fields_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
+        # 字段区
+        fields_frame = ttk.LabelFrame(dialog, text="")
+        fields_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         field_vars = {}
+        bluetooth_selected = {}
+
+        # 底部区（名称/硬件库检索/能力包/保存）——连接成功后显示
+        bottom_frame = ttk.Frame(dialog)
+        bottom_frame.pack(fill=tk.X, padx=8, pady=6)
+
+        def add_field(parent, label, default):
+            frame = ttk.Frame(parent)
+            frame.pack(fill=tk.X, pady=2)
+            ttk.Label(frame, text=label, width=24).pack(side=tk.LEFT)
+            var = tk.StringVar(value=default)
+            ttk.Entry(frame, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            return var
 
         def build_fields(conn_key):
             for widget in fields_frame.winfo_children():
                 widget.destroy()
 
             field_vars.clear()
+            bluetooth_selected.clear()
 
             if conn_key == "serial":
-                field_vars["port"] = self._add_field(fields_frame, self.t("dlg_serial_port"), "COM3")
-                field_vars["baudrate"] = self._add_field(fields_frame, self.t("dlg_baudrate"), "115200")
+                field_vars["port"] = add_field(fields_frame, self.t("dlg_serial_port"), "COM3")
+                field_vars["baudrate"] = add_field(fields_frame, self.t("dlg_baudrate"), "115200")
+                show_bottom()
             elif conn_key == "tcp":
-                field_vars["host"] = self._add_field(fields_frame, self.t("dlg_host"), "192.168.1.100")
-                field_vars["port"] = self._add_field(fields_frame, self.t("dlg_port"), "8888")
+                field_vars["host"] = add_field(fields_frame, self.t("dlg_host"), "192.168.1.100")
+                field_vars["port"] = add_field(fields_frame, self.t("dlg_port"), "8888")
+                show_bottom()
             elif conn_key == "udp":
-                field_vars["host"] = self._add_field(fields_frame, self.t("dlg_host"), "0.0.0.0")
-                field_vars["port"] = self._add_field(fields_frame, self.t("dlg_port"), "8888")
-            elif conn_key == "bluetooth":
-                field_vars["device"] = self._add_field(fields_frame, self.t("dlg_bluetooth_dev"), "COM4")
-                field_vars["channel"] = self._add_field(fields_frame, self.t("dlg_channel"), "1")
+                field_vars["host"] = add_field(fields_frame, self.t("dlg_host"), "0.0.0.0")
+                field_vars["port"] = add_field(fields_frame, self.t("dlg_port"), "8888")
+                show_bottom()
             elif conn_key == "hid":
-                field_vars["index"] = self._add_field(fields_frame, "Joystick index", "0")
-            elif conn_key == "ftms":
-                field_vars["address"] = self._add_field(fields_frame, "BLE address (optional)", "")
+                field_vars["index"] = add_field(fields_frame, "Joystick index", "0")
+                show_bottom()
+            elif conn_key in ("bluetooth", "ftms"):
+                # 蓝牙：搜索配对窗口
+                ttk.Button(
+                    fields_frame,
+                    text="Search Bluetooth Devices...",
+                    command=lambda: self._bluetooth_scan_dialog(bluetooth_selected, on_bluetooth_picked, conn_key),
+                ).pack(pady=12)
 
-        def on_conn_change(*_args):
-            build_fields(conn_map[conn_var.get()])
+                status_var = tk.StringVar(value="No device selected")
+                ttk.Label(fields_frame, textvariable=status_var).pack(pady=4)
+                field_vars["_status"] = status_var
 
-        conn_combo.bind("<<ComboboxSelected>>", on_conn_change)
-        build_fields("serial")
+                hide_bottom()
+            else:
+                show_bottom()
 
-        ttk.Label(dialog, text=self.t("dlg_package")).pack(padx=8, pady=4)
-        pkg_var = tk.StringVar(value="motion_demo")
-        ttk.Entry(dialog, textvariable=pkg_var).pack(fill=tk.X, padx=8)
+        def on_bluetooth_picked(device_info):
+            bluetooth_selected.update(device_info)
 
-        def save():
-            conn_key = conn_map[conn_var.get()]
+            status = field_vars.get("_status")
+            if status:
+                status.set(f"Selected: {device_info.get('label', '?')}")
 
+            show_bottom()
+
+        def hide_bottom():
+            for widget in bottom_frame.winfo_children():
+                widget.destroy()
+
+        def show_bottom():
+            for widget in bottom_frame.winfo_children():
+                widget.destroy()
+
+            # 自定义名称
+            ttk.Label(bottom_frame, text=self.t("dlg_custom_name")).pack(padx=4, pady=(6, 2))
+            name_var = tk.StringVar()
+            ttk.Entry(bottom_frame, textvariable=name_var).pack(fill=tk.X, padx=4)
+
+            # 硬件库检索勾选
+            use_library_var = tk.BooleanVar(value=True)
+            ttk.Checkbutton(
+                bottom_frame,
+                text=self.t("dlg_use_library"),
+                variable=use_library_var,
+            ).pack(anchor=tk.W, padx=4, pady=2)
+
+            # 能力包
+            ttk.Label(bottom_frame, text=self.t("dlg_package")).pack(padx=4, pady=(6, 2))
+            pkg_var = tk.StringVar(value="motion_demo")
+            ttk.Entry(bottom_frame, textvariable=pkg_var).pack(fill=tk.X, padx=4)
+
+            ttk.Button(
+                bottom_frame,
+                text=self.t("dlg_save"),
+                command=lambda: save(conn_map[conn_var.get()], name_var, use_library_var, pkg_var),
+            ).pack(padx=4, pady=8)
+
+        def save(conn_key, name_var, use_library_var, pkg_var):
             driver = conn_key
 
             if conn_key in ("tcp", "udp", "bluetooth", "custom"):
@@ -522,6 +577,7 @@ class CapabilityNexusGUI:
                 "name": name_var.get() or "New Device",
                 "driver": driver,
                 "package": pkg_var.get(),
+                "use_library": use_library_var.get(),
             }
 
             if conn_key == "serial":
@@ -543,18 +599,23 @@ class CapabilityNexusGUI:
                     "port": int(field_vars["port"].get() or 8888),
                 }
             elif conn_key == "bluetooth":
+                if not bluetooth_selected:
+                    messagebox.showwarning(self.t("dlg_no_target"), "Select a Bluetooth device first")
+                    return
                 entry["connection"] = {
                     "type": "bluetooth",
-                    "device": field_vars["device"].get(),
-                    "channel": int(field_vars["channel"].get() or 1),
+                    "device": bluetooth_selected.get("port") or bluetooth_selected.get("address"),
+                    "channel": int(bluetooth_selected.get("channel", 1)),
                 }
+            elif conn_key == "ftms":
+                if not bluetooth_selected:
+                    messagebox.showwarning(self.t("dlg_no_target"), "Select a BLE device first")
+                    return
+                entry["driver"] = "ftms"
+                entry["address"] = bluetooth_selected.get("address")
             elif conn_key == "hid":
                 entry["driver"] = "hid"
                 entry["index"] = int(field_vars["index"].get() or 0)
-            elif conn_key == "ftms":
-                entry["driver"] = "ftms"
-                if field_vars["address"].get():
-                    entry["address"] = field_vars["address"].get()
 
             data = config_io.load_config()
             data["devices"].append(entry)
@@ -564,15 +625,97 @@ class CapabilityNexusGUI:
             self.log(f"{self.t('log_added_device')}: {entry.get('name')}")
             dialog.destroy()
 
-        ttk.Button(dialog, text=self.t("dlg_save"), command=save).pack(padx=8, pady=10)
+        def on_conn_change(*_args):
+            build_fields(conn_map[conn_var.get()])
 
-    def _add_field(self, parent, label, default):
-        frame = ttk.Frame(parent)
-        frame.pack(fill=tk.X, pady=2)
-        ttk.Label(frame, text=label, width=22).pack(side=tk.LEFT)
-        var = tk.StringVar(value=default)
-        ttk.Entry(frame, textvariable=var).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        return var
+        conn_combo.bind("<<ComboboxSelected>>", on_conn_change)
+        build_fields("serial")
+
+    def _bluetooth_scan_dialog(self, bluetooth_selected, on_picked, conn_key):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Bluetooth Devices")
+        dialog.geometry("520x420")
+
+        ttk.Label(dialog, text="Scanning Bluetooth devices...").pack(padx=8, pady=8)
+
+        self.bt_list = tk.Listbox(dialog)
+        self.bt_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        devices = []
+
+        def populate():
+            # 系统蓝牙 COM 口
+            try:
+                from serial.tools import list_ports
+
+                for port in list_ports.comports():
+                    if "Bluetooth" in port.description or "蓝牙" in port.description:
+                        devices.append({
+                            "label": f"{port.device} - {port.description}",
+                            "port": port.device,
+                            "address": port.device,
+                            "channel": 1,
+                        })
+                        self.bt_list.insert(tk.END, f"COM  {port.device} - {port.description}")
+            except Exception as e:
+                print("[BT] COM scan:", e)
+
+            # BLE 设备
+            self.bt_list.insert(tk.END, "(scanning BLE...)")
+
+            try:
+                import asyncio
+                from bleak import BleakScanner
+
+                async def scan():
+                    found = await BleakScanner.discover(timeout=5)
+                    return found
+
+                loop = asyncio.new_event_loop()
+                try:
+                    ble_devices = loop.run_until_complete(scan())
+                finally:
+                    loop.close()
+
+                self.bt_list.delete(tk.END)
+
+                for d in ble_devices:
+                    name = d.name or "(unnamed)"
+                    devices.append({
+                        "label": f"{name} - {d.address}",
+                        "address": d.address,
+                        "port": d.address,
+                        "channel": 1,
+                        "is_ble": True,
+                    })
+                    self.bt_list.insert(tk.END, f"BLE  {name} - {d.address}")
+            except Exception as e:
+                self.bt_list.insert(tk.END, f"(BLE scan failed: {e})")
+
+        def select():
+            index = self.bt_list.curselection()
+
+            if not index:
+                return
+
+            device_info = devices[index[0]]
+
+            if conn_key == "bluetooth" and not device_info.get("is_ble"):
+                on_picked(device_info)
+                dialog.destroy()
+            elif conn_key == "ftms" and device_info.get("is_ble"):
+                on_picked(device_info)
+                dialog.destroy()
+            else:
+                messagebox.showwarning(
+                    self.t("dlg_no_target"),
+                    "Pick a matching device type",
+                )
+
+        ttk.Button(dialog, text=self.t("dlg_apply"), command=select).pack(padx=8, pady=8)
+
+        import threading
+        threading.Thread(target=populate, daemon=True).start()
 
     def install_from_library(self):
         try:
