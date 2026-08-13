@@ -632,65 +632,89 @@ class CapabilityNexusGUI:
         build_fields("serial")
 
     def _bluetooth_scan_dialog(self, bluetooth_selected, on_picked, conn_key):
+        import queue
+
+        from devices.bluetooth_scanner import BluetoothScanner
+
         dialog = tk.Toplevel(self.root)
         dialog.title("Bluetooth Devices")
-        dialog.geometry("520x420")
+        dialog.geometry("560x460")
 
-        ttk.Label(dialog, text="Scanning Bluetooth devices...").pack(padx=8, pady=8)
+        ttk.Label(dialog, text="Paired devices:", font=("Arial", 10, "bold")).pack(
+            anchor=tk.W, padx=8, pady=(8, 2),
+        )
 
-        self.bt_list = tk.Listbox(dialog)
+        self.bt_list = tk.Listbox(dialog, height=12)
         self.bt_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         devices = []
+        scanner = BluetoothScanner()
+        result_queue = queue.Queue()
 
-        def populate():
-            # 系统蓝牙 COM 口
+        def worker_paired():
+            paired = scanner.list_paired_ble()
+            result_queue.put(("paired", paired))
+
+        def worker_scan():
+            found = scanner.scan_ble(timeout=5)
+            result_queue.put(("scan", found))
+
+        def poll_queue():
             try:
-                from serial.tools import list_ports
+                while True:
+                    kind, payload = result_queue.get_nowait()
 
-                for port in list_ports.comports():
-                    if "Bluetooth" in port.description or "蓝牙" in port.description:
-                        devices.append({
-                            "label": f"{port.device} - {port.description}",
-                            "port": port.device,
-                            "address": port.device,
-                            "channel": 1,
-                        })
-                        self.bt_list.insert(tk.END, f"COM  {port.device} - {port.description}")
-            except Exception as e:
-                print("[BT] COM scan:", e)
+                    if kind == "paired":
+                        self.bt_list.delete(0, tk.END)
 
-            # BLE 设备
-            self.bt_list.insert(tk.END, "(scanning BLE...)")
+                        if not payload:
+                            self.bt_list.insert(tk.END, "(no paired Bluetooth devices found)")
+                            continue
 
-            try:
-                import asyncio
-                from bleak import BleakScanner
+                        for d in payload:
+                            state = "connected" if d.get("connected") else ""
+                            label = f"{d['name']}  [{state}]" if state else d["name"]
 
-                async def scan():
-                    found = await BleakScanner.discover(timeout=5)
-                    return found
+                            devices.append({
+                                "label": label,
+                                "address": d["address"],
+                                "port": d["address"],
+                                "channel": 1,
+                                "is_ble": d.get("ble", False),
+                                "is_paired": True,
+                            })
+                            self.bt_list.insert(tk.END, label)
 
-                loop = asyncio.new_event_loop()
-                try:
-                    ble_devices = loop.run_until_complete(scan())
-                finally:
-                    loop.close()
+                    elif kind == "scan":
+                        self.bt_list.delete(0, tk.END)
 
-                self.bt_list.delete(tk.END)
+                        if not payload:
+                            self.bt_list.insert(tk.END, "(no new devices found)")
+                            continue
 
-                for d in ble_devices:
-                    name = d.name or "(unnamed)"
-                    devices.append({
-                        "label": f"{name} - {d.address}",
-                        "address": d.address,
-                        "port": d.address,
-                        "channel": 1,
-                        "is_ble": True,
-                    })
-                    self.bt_list.insert(tk.END, f"BLE  {name} - {d.address}")
-            except Exception as e:
-                self.bt_list.insert(tk.END, f"(BLE scan failed: {e})")
+                        for d in payload:
+                            devices.append({
+                                "label": d["name"],
+                                "address": d["address"],
+                                "port": d["address"],
+                                "channel": 1,
+                                "is_ble": True,
+                                "is_paired": False,
+                            })
+                            self.bt_list.insert(tk.END, f"NEW  {d['name']} - {d['address']}")
+
+            except queue.Empty:
+                pass
+
+            self.root.after(100, poll_queue)
+
+        def search_new():
+            self.bt_list.delete(0, tk.END)
+            devices.clear()
+            self.bt_list.insert(tk.END, "(scanning for new BLE devices...)")
+
+            import threading
+            threading.Thread(target=worker_scan, daemon=True).start()
 
         def select():
             index = self.bt_list.curselection()
@@ -712,10 +736,14 @@ class CapabilityNexusGUI:
                     "Pick a matching device type",
                 )
 
-        ttk.Button(dialog, text=self.t("dlg_apply"), command=select).pack(padx=8, pady=8)
+        btns = ttk.Frame(dialog)
+        btns.pack(fill=tk.X, padx=8, pady=6)
+        ttk.Button(btns, text="Search New Devices...", command=search_new).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btns, text=self.t("dlg_apply"), command=select).pack(side=tk.LEFT, padx=2)
 
         import threading
-        threading.Thread(target=populate, daemon=True).start()
+        threading.Thread(target=worker_paired, daemon=True).start()
+        self.root.after(100, poll_queue)
 
     def install_from_library(self):
         try:
