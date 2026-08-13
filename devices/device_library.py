@@ -71,23 +71,19 @@ class DeviceLibrary:
             return False
 
         if fp.get("type") == "serial":
-            if "vid" in fp and "vid" in device_fp:
-                if fp["vid"].lower() != device_fp["vid"].lower():
+            if "vid" in device_fp:
+                if "vid" not in fp or device_fp["vid"].lower() != fp["vid"].lower():
                     return False
-            elif "vid" in fp:
-                return False
 
-            if "pid" in fp and "pid" in device_fp:
-                if fp["pid"].lower() != device_fp["pid"].lower():
+            if "pid" in device_fp:
+                if "pid" not in fp or device_fp["pid"].lower() != fp["pid"].lower():
                     return False
-            elif "pid" in fp:
-                return False
 
-            if "description" in fp and "description" in device_fp:
-                if fp["description"].lower() not in device_fp["description"].lower():
+            if "description" in device_fp:
+                if "description" not in fp:
                     return False
-            elif "description" in fp:
-                return False
+                if device_fp["description"].lower() not in fp["description"].lower():
+                    return False
 
             return True
 

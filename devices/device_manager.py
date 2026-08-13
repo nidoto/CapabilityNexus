@@ -58,8 +58,26 @@ class DeviceManager:
             entry = self.library.identify(d)
 
             if entry:
-                resolved.append((d, entry, "auto"))
-                print("[DeviceManager] Identified:", entry.get("name"))
+                kind = entry.get("kind", "product")
+
+                config_entry = self._match_config(d)
+
+                if config_entry:
+                    resolved.append((d, config_entry, "config"))
+                    print("[DeviceManager] Matched config:", config_entry.get("name"))
+                elif kind == "product":
+                    resolved.append((d, entry, "auto"))
+                    print("[DeviceManager] Identified product:", entry.get("name"))
+                else:
+                    print(
+                        "[DeviceManager] Template device:",
+                        entry.get("name"),
+                    )
+                    print(
+                        "[DeviceManager]   Define its capabilities in",
+                        self.config_path,
+                        "(it's a custom board - you choose what each channel is)",
+                    )
             else:
                 config_entry = self._match_config(d)
 
