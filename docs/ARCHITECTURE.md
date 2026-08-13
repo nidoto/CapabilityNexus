@@ -63,19 +63,23 @@ ESP32 / Xbox One / USB / Serial / Bluetooth
               |
               |
               v
-       Mapping Engine
+      Transform Layer      ← 预留扩展点（未来用户自定义逻辑表）
+              |              （组合 / 定时 / 条件触发）
+              |
+              v
+        Mapping Engine
               |
               |
               v
-        Output Event
+         Output Event
               |
               |
               v
-        Output Router
+         Output Router
               |
       ┌───────┴───────┐
       v               v
-  虚拟 x360      真实 Xbox One
+   虚拟 x360      真实 Xbox One
       |               |
       v               v
     游戏          震动马达
@@ -299,6 +303,39 @@ profiles/default.json
 
 - 虚拟设备目标（right_x / button_a / left_trigger ...）
 - 真实设备目标（xbox.motor_left / xbox.motor_right ...）
+
+9.1 Transform Layer（预留扩展点）
+
+位置：
+
+ProcessedChannel 之后、MappingEngine 之前。
+
+作用（未来实现，当前仅预留接口）：
+
+用户自定义逻辑变换表。
+
+用户可用简单逻辑语句定义变换，例如：
+
+按 A 键 3 秒 → 触发 B 键
+
+按 X 键两次 → 触发 Y
+
+连按 → 双击
+
+接口约定：
+
+Transform Layer 接收 ProcessedChannel，输出 ProcessedChannel。
+
+它不感知设备，只做"能力 → 能力"的变换。
+
+当前状态：
+
+未实现。
+
+架构已保证插入位置不改变数据流：
+StreamData → Channel → ProcessedChannel → [TransformLayer] → MappingEngine → OutputEvent
+
+未来新增 TransformLayer 不需要改动 MappingEngine 与数据流。
 10. Output 系统
 
 目录：
