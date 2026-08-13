@@ -1,5 +1,6 @@
 from devices.serial_connection import SerialConnection
 from devices.tcp_connection import TcpConnection
+from devices.udp_connection import UdpConnection
 
 
 class ConnectionFactory:
@@ -20,6 +21,13 @@ class ConnectionFactory:
                 callback,
                 host=params.get("host"),
                 port=params.get("port"),
+            )
+
+        if connection_type == "udp":
+            return UdpConnection(
+                callback,
+                host=params.get("host", "0.0.0.0"),
+                port=params.get("port", 8888),
             )
 
         if connection_type == "bluetooth":

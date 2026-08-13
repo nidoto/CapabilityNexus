@@ -115,9 +115,10 @@ def cmd_add_device():
         print("Connection types:")
         print("  serial     - USB serial port (COMx)")
         print("  tcp        - WiFi / network (host:port)")
+        print("  udp        - UDP network (listen on port)")
         print("  bluetooth  - Bluetooth RFCOMM")
         print("  custom     - your own connection script")
-        conn_type = ask("Connection type (serial/tcp/bluetooth/custom)", default="serial")
+        conn_type = ask("Connection type (serial/tcp/udp/bluetooth/custom)", default="serial")
 
         vid = ask("VID (optional, e.g. 1A86)")
         pid = ask("PID (optional, e.g. 55D3)")
@@ -128,6 +129,14 @@ def cmd_add_device():
             port = ask_number("Port", default=8888)
             connection = {
                 "type": "tcp",
+                "host": host,
+                "port": int(port),
+            }
+        elif conn_type == "udp":
+            host = ask("Listen host (default 0.0.0.0)", default="0.0.0.0")
+            port = ask_number("Listen port", default=8888)
+            connection = {
+                "type": "udp",
                 "host": host,
                 "port": int(port),
             }
