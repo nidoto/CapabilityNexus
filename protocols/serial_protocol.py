@@ -1,165 +1,73 @@
 from core.stream import StreamData
 
 
-
 class SerialParser:
 
-
-    def __init__(
-        self,
-        event_bus
-    ):
-
+    def __init__(self, event_bus, mapping=None, has_frame=False, frame_prefix="FRAME="):
         self.event_bus = event_bus
-
+        self.mapping = mapping or {}
+        self.has_frame = has_frame
+        self.frame_prefix = frame_prefix
 
         self.frame = None
-
-
         self.last_frame = -1
 
-
-
-        self.mapping = {
-
-            "X": "motion.yaw",
-
-            "Y": "motion.pitch",
-
-            "R": "motion.roll"
-
-        }
-
-
-
-    def parse(
-        self,
-        line
-    ):
-
-
+    def parse(self, line):
         line = line.strip()
 
-
-
         if not line:
-
             return
 
+        if self.has_frame:
+            if line.startswith(self.frame_prefix):
+                self._on_frame(line)
+                return
 
-
-        #
-        # FRAME
-        #
-
-        if line.startswith(
-            "FRAME="
-        ):
-
-
-            frame = int(
-                line.split("=")[1]
-            )
-
-
-            #
-            # 丢弃旧帧
-            #
-
-            if frame < self.last_frame:
-
-                print(
-                    "[SerialParser] Frame counter reset, resync",
-                    frame
-                )
-
-                self.last_frame = frame - 1
-
-
-
-            self.last_frame = frame
-
-            self.frame = frame
-
-
-
-            print(
-                "[Frame]",
-                frame
-            )
-
-
-            return
-
-
-
-        #
-        # 没有FRAME不处理
-        #
-
-        if self.frame is None:
-
-            return
-
-
-
-        #
-        # 数据
-        #
+            if self.frame is None:
+                return
 
         if "=" not in line:
-
             return
 
-
-
-        key,value = line.split(
-            "=",
-            1
-        )
-
-
+        key, value = line.split("=", 1)
 
         if key not in self.mapping:
-
             return
-
-
 
         try:
-
-            value=float(value)
-
-
-        except:
-
+            value = float(value)
+        except ValueError:
             return
 
-
-
-
         stream = StreamData(
-
             id=self.mapping[key],
-
             value=value
-
         )
-
-
 
         print(
-
             "[StreamData]",
-
             stream
-
         )
 
+        self.event_bus.publish(stream)
 
+    def _on_frame(self, line):
+        try:
+            frame = int(line.split("=")[1])
+        except (ValueError, IndexError):
+            return
 
-        self.event_bus.publish(
+        if frame < self.last_frame:
+            print(
+                "[SerialParser] Frame counter reset, resync",
+                frame
+            )
+            self.last_frame = frame - 1
 
-            stream
+        self.last_frame = frame
+        self.frame = frame
 
+        print(
+            "[Frame]",
+            frame
         )

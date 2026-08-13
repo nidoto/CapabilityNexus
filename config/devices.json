@@ -8,7 +8,16 @@
             "baudrate": 115200,
             "vid": "1A86",
             "pid": "55D3",
-            "package": "motion_demo"
+            "package": "motion_demo",
+            "protocol": {
+                "has_frame": true,
+                "frame_prefix": "FRAME=",
+                "mapping": {
+                    "X": "motion.yaw",
+                    "Y": "motion.pitch",
+                    "R": "motion.roll"
+                }
+            }
         }
 
     ]

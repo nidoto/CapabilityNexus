@@ -135,7 +135,12 @@ class DeviceManager:
             baudrate = entry.get("baudrate", 115200)
 
             from protocols.serial_protocol import SerialParser
-            parser = SerialParser(self.event_bus)
+            protocol = entry.get("protocol", {})
+            parser = SerialParser(
+                self.event_bus,
+                mapping=protocol.get("mapping"),
+                has_frame=protocol.get("has_frame", False),
+            )
 
             def callback(line):
                 parser.parse(line)
