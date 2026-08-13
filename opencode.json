@@ -1,0 +1,9 @@
+{
+  "plugin": ["opencode-openai-residency"],
+  "provider": {
+    "openai": {
+      "enforce_residency": "us",
+      "ua_override": true
+    }
+  }
+}

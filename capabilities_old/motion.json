@@ -1,0 +1,58 @@
+{
+    "capabilities": [
+
+        {
+            "id": "motion.pitch",
+            "category": "axis",
+            "value_type": "float",
+
+            "range": [
+                -180,
+                180
+            ],
+
+            "continuous": true,
+
+            "return_center": true,
+
+            "update_rate": 100
+        },
+
+
+        {
+            "id": "motion.roll",
+            "category": "axis",
+            "value_type": "float",
+
+            "range": [
+                -180,
+                180
+            ],
+
+            "continuous": true,
+
+            "return_center": true,
+
+            "update_rate": 100
+        },
+
+
+        {
+            "id": "motion.yaw",
+            "category": "axis",
+            "value_type": "float",
+
+            "range": [
+                -180,
+                180
+            ],
+
+            "continuous": true,
+
+            "return_center": true,
+
+            "update_rate": 100
+        }
+
+    ]
+}

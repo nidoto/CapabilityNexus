@@ -1,0 +1,13 @@
+{
+    "name":"CNX Motion Demo",
+
+    "author":"CapabilityNexus",
+
+    "version":"1.0",
+
+    "description":
+    "Demo motion controller package",
+
+    "type":
+    "input"
+}

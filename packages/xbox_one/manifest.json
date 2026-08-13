@@ -1,0 +1,13 @@
+{
+    "name": "CNX Xbox One",
+
+    "author": "CapabilityNexus",
+
+    "version": "1.0",
+
+    "description":
+    "Xbox One controller input package",
+
+    "type":
+    "input"
+}
