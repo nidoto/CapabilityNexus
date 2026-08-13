@@ -1,0 +1,7 @@
+{
+    "name": "Cycling Trainer (FTMS)",
+    "author": "CapabilityNexus",
+    "version": "1.0",
+    "description": "BLE FTMS cycling trainer (power/cadence/speed)",
+    "type": "input"
+}

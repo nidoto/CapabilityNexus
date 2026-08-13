@@ -93,7 +93,7 @@ def cmd_add_device():
     print()
 
     name = ask("Device name", required=True)
-    driver = ask("Driver (serial/xinput/hid)", default="serial")
+    driver = ask("Driver (serial/xinput/hid/ftms)", default="serial")
 
     if driver == "xinput":
         entry = {
@@ -110,6 +110,20 @@ def cmd_add_device():
             "index": int(index),
             "package": package,
         }
+    elif driver == "ftms":
+        print()
+        print("FTMS uses BLE. Optionally specify a device, or leave empty to scan.")
+        address = ask("BLE address (optional, e.g. AA:BB:CC:DD:EE:FF)")
+        package = ask("Capability package name", default="cycling")
+
+        entry = {
+            "name": name,
+            "driver": "ftms",
+            "package": package,
+        }
+
+        if address:
+            entry["address"] = address
     else:
         print()
         print("Connection types:")

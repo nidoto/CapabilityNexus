@@ -136,6 +136,17 @@ class DeviceManager:
             device.connect()
             return device
 
+        if driver == "ftms":
+            from devices.ftms_device import FTMSDevice
+
+            device = FTMSDevice(
+                self.event_bus,
+                address=entry.get("address"),
+                name=entry.get("name"),
+            )
+            device.connect()
+            return device
+
         if driver == "serial":
             from devices.connection_factory import ConnectionFactory
             from protocols.serial_protocol import SerialParser
