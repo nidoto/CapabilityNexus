@@ -145,78 +145,68 @@ class BluetoothScanner:
 
     def list_paired_ble(self):
         devices = []
-        import re
 
         try:
-            import asyncio
-            from winsdk.windows.devices.enumeration import (
-                DeviceInformation as DI,
+            from ctypes import wintypes
+            import subprocess
+
+            result = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "Get-PnpDevice -PresentOnly -Class Bluetooth "
+                    "| Select-Object FriendlyName, Status, InstanceId "
+                    "| ConvertTo-Json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=20,
             )
 
-            async def _enum():
-                return await DI.find_all_async()
+            if result.returncode != 0:
+                print("[BT] PnP query failed:", result.stderr[:200])
+                return devices
 
-            loop = asyncio.new_event_loop()
+            import json as _json
 
-            try:
-                items = loop.run_until_complete(_enum())
-            finally:
-                loop.close()
+            parsed = _json.loads(result.stdout or "[]")
 
-            for item in items:
-                name = item.name
-                device_id = item.id
+            if isinstance(parsed, dict):
+                parsed = [parsed]
+
+            for item in parsed:
+                name = item.get("FriendlyName")
+                instance_id = item.get("InstanceId") or ""
+                status = item.get("Status") or ""
 
                 if not name:
                     continue
 
-                marker = device_id.upper()
+                # 过滤系统内部蓝牙服务
+                skip_keywords = [
+                    "设备信息", "通用属性", "通用访问",
+                    "LE 枚举器", "枚举器", "RFCOMM",
+                    "LE 通用属性", "GATT", "avrcp",
+                    "Avrcp", "AVRCP", "Service",
+                ]
 
-                is_bluetooth = any(
-                    m in marker
-                    for m in ("BTHLE", "BTHENUM", "BTHHFENUM", "BTH#", "\\?\\BTH")
-                )
-
-                if not is_bluetooth:
+                if any(k in name for k in skip_keywords):
                     continue
 
-                connected = False
+                # 过滤适配器
+                if "Bluetooth Adapter" in name or "蓝牙适配器" in name:
+                    continue
 
-                try:
-                    connected = bool(
-                        item.properties.get(
-                            "System.Devices.Aep.IsConnected",
-                            False,
-                        )
-                    )
-                except Exception:
-                    connected = False
+                marker = instance_id.upper()
 
                 devices.append({
                     "name": name,
-                    "address": device_id,
-                    "connected": connected,
+                    "address": instance_id,
+                    "connected": status == "OK",
                     "remembered": True,
-                    "ble": "BTHLE" in marker,
+                    "ble": "BTHLE" in marker or "BTHLEDEVICE" in marker,
                 })
-
-            seen = {}
-            for d in devices:
-                mac = ""
-                m = re.search(r"Dev_([0-9A-Fa-f]{12})", d["address"])
-                if m:
-                    mac = m.group(1).lower()
-                else:
-                    m2 = re.search(r"([0-9A-Fa-f]{12})", d["address"])
-                    if m2:
-                        mac = m2.group(1).lower()
-
-                key = (d["name"], mac)
-
-                if key not in seen:
-                    seen[key] = d
-
-            return list(seen.values())
 
         except Exception as e:
             print("[BT] Paired BLE scan failed:", e)
