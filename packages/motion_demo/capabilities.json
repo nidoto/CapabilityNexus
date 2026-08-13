@@ -1,60 +1,49 @@
 {
-    "capabilities":[
-
-
+    "capabilities": [
         {
-            "id":"motion.pitch",
-
-            "category":"axis",
-
-            "value_type":"float",
-
-            "range":[
+            "id": "motion.pitch",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
                 -180,
                 180
             ],
-
-            "continuous":true,
-
-            "return_center":true
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
         },
-
-
         {
-            "id":"motion.roll",
-
-            "category":"axis",
-
-            "value_type":"float",
-
-            "range":[
+            "id": "motion.roll",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
                 -180,
                 180
             ],
-
-            "continuous":true,
-
-            "return_center":true
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
         },
-
-
         {
-            "id":"motion.yaw",
-
-            "category":"axis",
-
-            "value_type":"float",
-
-            "range":[
+            "id": "motion.yaw",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
                 -180,
                 180
             ],
-
-            "continuous":true,
-
-            "return_center":true
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
         }
-
-
     ]
 }

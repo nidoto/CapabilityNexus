@@ -118,6 +118,11 @@ umi_parser = UMIParser(
 # StreamData -> Channel
 #
 
+from core.transport import TransportController
+
+transport_controller = TransportController()
+
+
 def stream_receive(
     stream
 ):
@@ -129,6 +134,13 @@ def stream_receive(
 
 
     if channel is None:
+
+        return
+
+
+    if not transport_controller.should_send(
+        channel
+    ):
 
         return
 

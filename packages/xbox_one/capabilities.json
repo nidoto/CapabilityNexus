@@ -1,191 +1,254 @@
 {
     "capabilities": [
-
         {
             "id": "xbox.left_x",
             "category": "axis",
             "value_type": "float",
-            "range": [-32768, 32767],
+            "range": [
+                -32768,
+                32767
+            ],
             "continuous": true,
-            "return_center": true
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         },
-
         {
             "id": "xbox.left_y",
             "category": "axis",
             "value_type": "float",
-            "range": [-32768, 32767],
+            "range": [
+                -32768,
+                32767
+            ],
             "continuous": true,
-            "return_center": true
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         },
-
         {
             "id": "xbox.right_x",
             "category": "axis",
             "value_type": "float",
-            "range": [-32768, 32767],
+            "range": [
+                -32768,
+                32767
+            ],
             "continuous": true,
-            "return_center": true
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         },
-
         {
             "id": "xbox.right_y",
             "category": "axis",
             "value_type": "float",
-            "range": [-32768, 32767],
+            "range": [
+                -32768,
+                32767
+            ],
             "continuous": true,
-            "return_center": true
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         },
-
         {
             "id": "xbox.left_trigger",
             "category": "trigger",
             "value_type": "float",
-            "range": [0, 255],
+            "range": [
+                0,
+                255
+            ],
             "continuous": true,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "state"
+            }
         },
-
         {
             "id": "xbox.right_trigger",
             "category": "trigger",
             "value_type": "float",
-            "range": [0, 255],
+            "range": [
+                0,
+                255
+            ],
             "continuous": true,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "state"
+            }
         },
-
         {
             "id": "xbox.a",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.b",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.x",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.y",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.lb",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.rb",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.ls",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.rs",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.start",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.back",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.dpad_up",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.dpad_down",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.dpad_left",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         },
-
         {
             "id": "xbox.dpad_right",
             "category": "button",
             "value_type": "bool",
             "continuous": false,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
         }
-
     ],
-
     "outputs": [
-
         {
             "id": "xbox.motor_left",
             "category": "motor",
             "value_type": "float",
-            "range": [0, 65535],
+            "range": [
+                0,
+                65535
+            ],
             "continuous": true
         },
-
         {
             "id": "xbox.motor_right",
             "category": "motor",
             "value_type": "float",
-            "range": [0, 65535],
+            "range": [
+                0,
+                65535
+            ],
             "continuous": true
         }
-
     ]
 }

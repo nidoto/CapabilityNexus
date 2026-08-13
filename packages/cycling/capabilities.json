@@ -1,41 +1,64 @@
 {
     "capabilities": [
-
         {
             "id": "cycling.power",
             "category": "axis",
             "value_type": "float",
-            "range": [-1000, 4000],
+            "range": [
+                -1000,
+                4000
+            ],
             "continuous": true,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         },
-
         {
             "id": "cycling.cadence",
             "category": "axis",
             "value_type": "float",
-            "range": [0, 300],
+            "range": [
+                0,
+                300
+            ],
             "continuous": true,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         },
-
         {
             "id": "cycling.speed",
             "category": "axis",
             "value_type": "float",
-            "range": [0, 120],
+            "range": [
+                0,
+                120
+            ],
             "continuous": true,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         },
-
         {
             "id": "cycling.resistance",
             "category": "axis",
             "value_type": "float",
-            "range": [0, 100],
+            "range": [
+                0,
+                100
+            ],
             "continuous": true,
-            "return_center": false
+            "return_center": false,
+            "transport": {
+                "mode": "stream",
+                "speed": "medium"
+            }
         }
-
     ]
 }
