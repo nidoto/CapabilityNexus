@@ -56,16 +56,6 @@ from output.virtual_xinput import VirtualXInput
 
 from protocols.umi_protocol import UMIParser
 
-from protocols.serial_protocol import SerialParser
-
-
-#
-# Device
-#
-
-from devices.serial_device import SerialDevice
-
-
 
 #
 # Event Bus
@@ -126,15 +116,6 @@ processor_manager.load(
 #
 
 umi_parser = UMIParser(
-    event_bus
-)
-
-
-#
-# Serial Parser (ESP32)
-#
-
-serial_parser = SerialParser(
     event_bus
 )
 
@@ -319,50 +300,22 @@ event_bus.subscribe(
 
 
 #
-# Serial Device
+# 设备管理：自动识别 + 手动配置
 #
 
-def serial_input(
-    line
-):
+from devices.device_manager import DeviceManager
 
-    serial_parser.parse(
-        line
-    )
-
-
-
-serial_device = SerialDevice(
-
-    port="COM3",
-
-    baudrate=115200,
-
-    callback=serial_input
-
-)
-
-
-
-#
-# ESP32阶段开启
-#
-
-serial_device.connect()
-
-
-#
-# Xbox One 手柄输入源
-#
-
-from devices.xinput_device import XInputDevice
-
-xinput_device = XInputDevice(
+device_manager = DeviceManager(
     event_bus
 )
 
-xinput_device.connect()
 
+resolved = device_manager.discover()
+
+
+device_manager.connect_all(
+    resolved
+)
 
 
 print(
