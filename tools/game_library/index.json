@@ -1,0 +1,14 @@
+{
+  "programs": [
+    {
+      "id": "gta5",
+      "name": "Grand Theft Auto V",
+      "executables": [
+        "gta5.exe",
+        "GTA5.exe",
+        "PlayGTAV.exe"
+      ],
+      "source": "virtual_x360"
+    }
+  ]
+}

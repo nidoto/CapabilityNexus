@@ -1,0 +1,22 @@
+{
+  "requests": {
+    "xbox.motor_left": {
+      "default": 65535,
+      "range": [
+        0,
+        65535
+      ]
+    },
+    "xbox.motor_right": {
+      "default": 65535,
+      "range": [
+        0,
+        65535
+      ]
+    }
+  },
+  "mapping": {
+    "xbox.motor_left": "xbox.motor_left",
+    "xbox.motor_right": "xbox.motor_right"
+  }
+}

@@ -8,6 +8,38 @@ DEFAULT_LIBRARY_URL = (
     "CapabilityNexus-Requests/master/index.json"
 )
 
+# 本地内置游戏库（随客户端分发，网络恢复前的离线来源）
+_LOCAL_LIBRARY_SOURCE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "tools",
+    "game_library",
+    "index.json",
+)
+
+
+def _local_library_path():
+    """返回本地游戏库路径（兼容源码运行与打包 exe）。"""
+    import sys as _sys
+
+    candidates = []
+
+    # 打包 exe：game_library 收集在 _internal/tools/game_library
+    if getattr(_sys, "frozen", False):
+        base = getattr(_sys, "_MEIPASS", os.path.dirname(_sys.executable))
+        candidates.append(os.path.join(base, "tools", "game_library", "index.json"))
+        exe_dir = os.path.dirname(_sys.executable)
+        candidates.append(os.path.join(exe_dir, "tools", "game_library", "index.json"))
+
+    candidates.append(_LOCAL_LIBRARY_SOURCE)
+
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return _LOCAL_LIBRARY_SOURCE
+
+
+LOCAL_LIBRARY_PATH = _local_library_path()
+
 DEFAULT_CACHE_PATH = os.path.join("config", "request_library_cache.json")
 
 # 可执行文件名匹配（忽略大小写、去空格）
@@ -55,8 +87,19 @@ class RequestLibrary:
             print("[RequestLibrary] Cache write failed:", e)
 
     def refresh(self, allow_network=True):
-        """加载索引：缓存优先，网络刷新可选（避免阻塞 GUI）"""
-        # 本地库文件
+        """加载索引：本地库优先，其次缓存，网络刷新可选（避免阻塞 GUI）"""
+        # 本地内置游戏库（随客户端分发）
+        if os.path.exists(LOCAL_LIBRARY_PATH):
+            try:
+                with open(LOCAL_LIBRARY_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self._entries = data.get("programs", data.get("entries", []))
+                print("[RequestLibrary] Loaded local library:", len(self._entries))
+                return
+            except Exception as e:
+                print("[RequestLibrary] Local library read failed:", e)
+
+        # 本地库文件（显式指定的路径）
         if os.path.exists(self.library_url):
             try:
                 with open(self.library_url, "r", encoding="utf-8") as f:
@@ -154,6 +197,15 @@ class RequestLibrary:
         return None
 
     def _file_url(self, program_id, filename):
+        # 本地内置游戏库优先
+        if os.path.exists(LOCAL_LIBRARY_PATH):
+            return os.path.join(
+                os.path.dirname(LOCAL_LIBRARY_PATH),
+                "programs",
+                program_id,
+                filename,
+            )
+
         if os.path.exists(self.library_url):
             return os.path.join(
                 os.path.dirname(self.library_url),
@@ -214,7 +266,7 @@ class RequestLibrary:
         return any(query in _norm(f) for f in fields if f)
 
     def save_local(self, path):
-        """导出索引到本地（供投稿 / 备份）"""
+        """导出索引到本地（供备份 / 手动分享）"""
         if self._entries is None:
             self.refresh()
 

@@ -135,6 +135,16 @@ boundaries and product documentation.
   - Double-clicking a process maps its exe name to a matching profile
     (e.g. Cyberpunk2077.exe -> cyberpunk2077), activates it and opens its
     tuning page
+- Bundled local game library
+  - `tools/game_library/` ships a local index + per-game reverse-request
+    configs (e.g. GTA5 dual rumble) so the client has an offline source until
+    the `CapabilityNexus-Requests` GitHub repo is published
+  - `RequestLibrary` loads the local library first, then the cache/network;
+    the download flow (index -> process match -> requests.json) is verified
+    against the local library
+  - Upload/contribution is intentionally not a client feature: submitting
+    game configs is done manually via GitHub to keep the client safe and
+    zero-privilege
 
 ## ESP32 Boundary
 

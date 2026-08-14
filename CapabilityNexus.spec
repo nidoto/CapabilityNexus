@@ -22,6 +22,7 @@ datas = [
     (os.path.join(data_dir, 'config'), 'config'),
     (os.path.join(data_dir, 'profiles'), 'profiles'),
     (os.path.join(data_dir, 'packages'), 'packages'),
+    (os.path.join(data_dir, 'tools', 'game_library'), 'tools/game_library'),
 ]
 
 a = Analysis(
