@@ -157,6 +157,7 @@ class CapabilityNexusGUI:
 
         mappings_menu = tk.Menu(menubar, tearoff=0)
         mappings_menu.add_command(label=self.t("menu_game_profiles"), command=self.show_game_profiles)
+        mappings_menu.add_command(label=self.t("menu_tuning_workspace"), command=lambda: self.show_tuning_workspace())
         mappings_menu.add_separator()
         mappings_menu.add_command(label=self.t("menu_auto_route"), command=self.auto_route)
         mappings_menu.add_command(label=self.t("menu_remove_mapping"), command=self.remove_mapping)
@@ -462,6 +463,7 @@ class CapabilityNexusGUI:
         self.proc_combo.bind("<KeyRelease>", self._on_proc_filter)
         self.proc_combo.bind("<<ComboboxSelected>>", self._on_proc_selected)
         self.proc_combo.bind("<Return>", self._on_proc_filter)
+        self.proc_combo.bind("<Double-Button-1>", self._on_proc_double_click)
 
         self.proc_refresh_btn = ttk.Button(
             row,
@@ -553,6 +555,61 @@ class CapabilityNexusGUI:
             return
 
         self._identify_process(self._process_keys[index])
+
+    def _on_proc_double_click(self, event):
+        """双击进程：若该进程有对应游戏配置，打开该配置的调优页面。"""
+        index = self.proc_combo.current()
+
+        if index < 0 or index >= len(self._process_keys):
+            return
+
+        entry = self._process_keys[index]
+
+        from devices.process_list import process_exe_name
+
+        try:
+            exe_name = process_exe_name(entry) or ""
+        except Exception as error:
+            self.log(f"Process exe lookup failed: {error}")
+            return
+
+        profile_name = self._profile_for_process(exe_name)
+
+        if profile_name is None:
+            self.log(f"No tuning profile for process: {exe_name or entry.get('name')}")
+            return
+
+        # 自动切换到该游戏的配置并打开调优页面
+        from tools import config_io
+
+        if config_io.get_active_profile() != profile_name:
+            if not config_io.set_active_profile(profile_name):
+                return
+            self.log(f"Active game profile: {profile_name}")
+            self._reload_profile_config()
+
+        self.show_tuning_workspace(profile_name)
+
+    @staticmethod
+    def _profile_for_process(exe_name):
+        """进程 exe 名 → 游戏配置名（无匹配返回 None）。"""
+        if not exe_name:
+            return None
+
+        exe_lower = exe_name.lower().replace(".exe", "").replace("_", " ").strip()
+
+        from tools import config_io
+
+        profiles = config_io.list_profiles()
+        if "default" in profiles:
+            profiles.remove("default")
+
+        # 精确匹配：配置名与 exe 名相近
+        for name in profiles:
+            if exe_lower in name or name in exe_lower:
+                return name
+
+        return None
 
     def _identify_process(self, entry):
         """识别进程：匹配反向需求库并导入"""
@@ -2465,6 +2522,224 @@ class CapabilityNexusGUI:
             self.app.request_handler.set_mappings(profile.get("mappings", {}))
         self.refresh_devices()
         self.log(self.t("game_profiles_loaded").format(config_io.get_active_profile()))
+
+    def show_tuning_workspace(self, profile_name=None):
+        """调优工作区：游戏配置 + 陀螺仪曲线 + 实时监控（从进程双击进入）。"""
+        from tools import config_io
+
+        profile_name = profile_name or config_io.get_active_profile()
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"{self.t('tuning_workspace_title')} - {profile_name}")
+        dialog.geometry("900x640")
+
+        # ---- 顶部：游戏配置选择 ----
+        top = ttk.Frame(dialog)
+        top.pack(fill=tk.X, padx=10, pady=(10, 4))
+
+        ttk.Label(top, text=self.t("tuning_profile")).pack(side=tk.LEFT, padx=(0, 6))
+        profile_var = tk.StringVar(value=profile_name)
+        profile_combo = ttk.Combobox(
+            top,
+            textvariable=profile_var,
+            values=config_io.list_profiles(),
+            state="readonly",
+            width=24,
+        )
+        profile_combo.pack(side=tk.LEFT)
+        profile_combo.bind("<<ComboboxSelected>>", lambda e: self._tuning_switch_profile(
+            dialog, profile_var.get(), profile_combo, canvas,
+            axis_var, deadzone_var, maxdeg_var, live_var, status_var,
+        ))
+
+        ttk.Label(top, text=self.t("tuning_hint"), foreground="#94a3b8").pack(side=tk.LEFT, padx=10)
+
+        # ---- 主体 ----
+        main = ttk.Frame(dialog)
+        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+
+        left = ttk.Frame(main)
+        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
+
+        ttk.Label(left, text=self.t("curve_tuner_axis")).pack(anchor=tk.W, pady=(0, 2))
+        axis_var = tk.StringVar(value="control.right_x")
+
+        self._curve_axes = {}
+        profile = config_io.load_profile_named(profile_name)
+        processors = profile.get("processors", {})
+        for cap_id in ("control.right_x", "control.right_y"):
+            proc_cfg = None
+            for p in processors.get(cap_id, []):
+                if p.get("type") == "curve":
+                    proc_cfg = p
+                    break
+            self._curve_axes[cap_id] = proc_cfg
+
+        for cap_id in ("control.right_x", "control.right_y"):
+            if not self._curve_axes.get(cap_id):
+                continue
+            label = {
+                "control.right_x": self.t("curve_tuner_rx"),
+                "control.right_y": self.t("curve_tuner_ry"),
+            }.get(cap_id, cap_id)
+            ttk.Radiobutton(
+                left,
+                text=label,
+                variable=axis_var,
+                value=cap_id,
+                command=lambda: self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var),
+            ).pack(anchor=tk.W, pady=1)
+
+        params = ttk.LabelFrame(left, text=self.t("curve_tuner_params"))
+        params.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Label(params, text=self.t("curve_tuner_deadzone")).grid(row=0, column=0, sticky=tk.W, padx=6, pady=3)
+        deadzone_var = tk.StringVar(value="1.5")
+        ttk.Entry(params, textvariable=deadzone_var, width=8).grid(row=0, column=1, padx=6, pady=3)
+
+        ttk.Label(params, text=self.t("curve_tuner_maxdeg")).grid(row=1, column=0, sticky=tk.W, padx=6, pady=3)
+        maxdeg_var = tk.StringVar(value="12")
+        ttk.Entry(params, textvariable=maxdeg_var, width=8).grid(row=1, column=1, padx=6, pady=3)
+
+        # ---- 右侧：预览 + 实时 ----
+        right = ttk.Frame(main)
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(right, width=460, height=360, bg="#0f172a", highlightthickness=1, highlightbackground="#334155")
+        canvas.pack(fill=tk.BOTH, expand=True)
+
+        live_var = tk.StringVar(value=self.t("curve_tuner_live_idle"))
+        ttk.Label(
+            right,
+            textvariable=live_var,
+            foreground="#67e8f9",
+            font=("Consolas", 10),
+        ).pack(fill=tk.X, padx=6, pady=(6, 0))
+
+        # ---- 底部：状态 + 操作 ----
+        bottom = ttk.Frame(dialog)
+        bottom.pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        status_var = tk.StringVar(value="")
+        ttk.Label(bottom, textvariable=status_var, foreground="#2563eb").pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        def save():
+            try:
+                deadzone = float(deadzone_var.get())
+                maxdeg = float(maxdeg_var.get())
+            except ValueError:
+                messagebox.showwarning(self.t("menu_game_profiles"), self.t("curve_tuner_invalid_num"))
+                return
+
+            cap_id = axis_var.get()
+            cfg = self._curve_axes.get(cap_id)
+            if not cfg:
+                return
+
+            old_max = float(cfg.get("max_degrees", 30))
+            old_points = cfg.get("points") or []
+            new_points = []
+            for angle, pct in old_points:
+                new_points.append([round(angle / old_max * maxdeg, 2), pct])
+
+            cfg["deadzone"] = deadzone
+            cfg["max_degrees"] = maxdeg
+            cfg["points"] = new_points
+            self._curve_axes[cap_id] = cfg
+
+            profile = config_io.load_profile_named(profile_var.get())
+            profile["processors"][cap_id] = [cfg]
+            config_io.save_profile_named(profile_var.get(), profile)
+            self._reload_profile_config()
+            status_var.set(self.t("curve_tuner_saved"))
+            self.log(f"Curve tuned: {cap_id} (deadzone={deadzone}, max={maxdeg})")
+            self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var)
+
+        ttk.Button(bottom, text=self.t("dlg_save"), command=save).pack(side=tk.RIGHT, padx=3)
+        ttk.Button(bottom, text=self.t("dlg_close"), command=dialog.destroy).pack(side=tk.RIGHT, padx=3)
+
+        # 实时刷新
+        tuner_job = [None]
+
+        def live_tick():
+            if not dialog.winfo_exists():
+                return
+            cap_id = axis_var.get()
+            cfg = self._curve_axes.get(cap_id)
+            if cfg and self.app is not None and hasattr(self.app, "status_monitor"):
+                monitor = self.app.status_monitor
+                raw = monitor.get_input_value(cap_id)
+                if raw is not None:
+                    from processors.curve import CurveProcessor
+
+                    cp = CurveProcessor(
+                        cfg.get("max_degrees", 30),
+                        cfg.get("deadzone", 1.5),
+                        cfg.get("points"),
+                        cfg.get("mode", "step"),
+                    )
+                    angle = raw / 32767.0 * 180.0
+                    out = cp.process(raw)
+                    pct = out / 32767.0 * 100.0
+                    live_var.set(
+                        self.t("curve_tuner_live").format(
+                            f"{angle:+.1f}", f"{raw:+.0f}", f"{pct:+.0f}", out
+                        )
+                    )
+                else:
+                    live_var.set(self.t("curve_tuner_live_idle"))
+            else:
+                live_var.set(self.t("curve_tuner_live_idle"))
+
+            tuner_job[0] = dialog.after(200, live_tick)
+
+        def on_close():
+            if tuner_job[0] is not None:
+                dialog.after_cancel(tuner_job[0])
+                tuner_job[0] = None
+            dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", on_close)
+        tuner_job[0] = dialog.after(200, live_tick)
+
+        # 初始化参数显示
+        init_cfg = self._curve_axes.get(axis_var.get())
+        if init_cfg:
+            deadzone_var.set(str(init_cfg.get("deadzone", 1.5)))
+            maxdeg_var.set(str(init_cfg.get("max_degrees", 12)))
+
+        self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var)
+
+    def _tuning_switch_profile(self, dialog, name, combo, canvas,
+                               axis_var, deadzone_var, maxdeg_var, live_var, status_var):
+        """调优工作区里切换游戏配置。"""
+        from tools import config_io
+
+        if not config_io.set_active_profile(name):
+            return
+        self.log(f"Active game profile: {name}")
+        self._reload_profile_config()
+        dialog.title(f"{self.t('tuning_workspace_title')} - {name}")
+
+        # 重新加载轴的曲线配置
+        self._curve_axes = {}
+        profile = config_io.load_profile_named(name)
+        processors = profile.get("processors", {})
+        for cap_id in ("control.right_x", "control.right_y"):
+            proc_cfg = None
+            for p in processors.get(cap_id, []):
+                if p.get("type") == "curve":
+                    proc_cfg = p
+                    break
+            self._curve_axes[cap_id] = proc_cfg
+
+        # 更新参数显示
+        init_cfg = self._curve_axes.get(axis_var.get())
+        if init_cfg:
+            deadzone_var.set(str(init_cfg.get("deadzone", 1.5)))
+            maxdeg_var.set(str(init_cfg.get("max_degrees", 12)))
+
+        self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var)
 
     def show_curve_tuner(self):
         """曲线调优对话框：可视化编辑陀螺仪响应曲线（档位/死区/角度范围）。"""

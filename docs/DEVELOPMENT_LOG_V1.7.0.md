@@ -128,6 +128,13 @@ boundaries and product documentation.
   - Edits deadzone, max angle and rescales band points for the active game
     profile's X and Y axes; saves and applies instantly without editing JSON
   - Verified: save -> engine reload keeps the tuned curve parameters
+- Game tuning workspace (Mappings > Game Tuning Workspace, or double-click a
+  process in the Current Program dropdown)
+  - Full tuning page with game-profile selector, X/Y gyro curve editing, live
+    preview and real-time angle -> output-band monitoring
+  - Double-clicking a process maps its exe name to a matching profile
+    (e.g. Cyberpunk2077.exe -> cyberpunk2077), activates it and opens its
+    tuning page
 
 ## ESP32 Boundary
 
