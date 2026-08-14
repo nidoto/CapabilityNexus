@@ -12,6 +12,9 @@ Thumbs.db
 config/device_library_cache.json
 config/request_library_cache.json
 
+# 本地 VS Code 配置（个人开发环境，不随仓库上传）
+.vscode/
+
 # 本地游戏调优配置（不随仓库上传，随设备/个人使用）
 profiles/local/
 config/active_profile.json
