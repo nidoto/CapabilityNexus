@@ -25,6 +25,11 @@ class CapabilityNexusGUI:
 
         self.refresh_devices()
         self._start_monitor_loop()
+        self.root.after(300, self._auto_start_engine)
+
+    def _auto_start_engine(self):
+        if self.app is None:
+            self.start_engine()
 
     def _start_monitor_loop(self):
         self._monitor_job = self.root.after(200, self._monitor_tick)
