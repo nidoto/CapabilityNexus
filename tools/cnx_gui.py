@@ -141,9 +141,9 @@ class CapabilityNexusGUI:
     def _find_device_node(self, item_id):
         while item_id:
             node = self.device_tree.item(item_id)
-            values = node.get("values", []) or []
+            tags = node.get("tags", [])
 
-            if values and values[0] == "device":
+            if "device" in tags:
                 return node.get("text")
 
             item_id = self.device_tree.parent(item_id)
@@ -236,7 +236,8 @@ class CapabilityNexusGUI:
                 "",
                 tk.END,
                 text=f"{name}  [{out_type}]",
-                values=("output_device",),
+                values=("",),
+                tags=("output_device",),
                 open=True,
             )
 
@@ -253,7 +254,8 @@ class CapabilityNexusGUI:
                         device_node,
                         tk.END,
                         text=f"{target}  ({desc})",
-                        values=("output_function", driver),
+                        values=(driver,),
+                        tags=("output_function",),
                     )
 
     def _driving_input(self, mappings, target):
@@ -338,19 +340,23 @@ class CapabilityNexusGUI:
 
         item = selection[0]
         node = self.output_tree.item(item)
-        values = node.get("values", []) or []
+        tags = node.get("tags", [])
 
         # 选中功能节点时向上找设备节点
-        while values and values[0] != "output_device":
+        while "output_device" not in tags:
             item = self.output_tree.parent(item)
+
+            if not item:
+                break
+
             node = self.output_tree.item(item)
-            values = node.get("values", []) or []
+            tags = node.get("tags", [])
 
-        device_text = node.get("text")
-
-        if not device_text:
+        if "output_device" not in tags:
             self.log("Select an output device node to remove.")
             return
+
+        device_text = node.get("text")
 
         outputs = config_io.load_outputs()
         entries = outputs.get("outputs", [])
@@ -407,7 +413,7 @@ class CapabilityNexusGUI:
                 "",
                 tk.END,
                 text=f"{name}  [{conn}]",
-                values=("device",),
+                values=("",),
                 tags=("device",),
                 open=True,
             )
@@ -425,7 +431,8 @@ class CapabilityNexusGUI:
                     device_node,
                     tk.END,
                     text=self.t("tree_input"),
-                    values=("group",),
+                    values=("",),
+                    tags=("group",),
                     open=True,
                 )
 
@@ -436,8 +443,8 @@ class CapabilityNexusGUI:
                         input_node,
                         tk.END,
                         text=cap_id,
-                        values=("capability", mapped_target(cap_id)),
-                        tags=("mapped",) if cap_id in mapped else (),
+                        values=(mapped_target(cap_id),),
+                        tags=("capability", "mapped") if cap_id in mapped else ("capability",),
                     )
 
             if outputs:
@@ -445,7 +452,8 @@ class CapabilityNexusGUI:
                     device_node,
                     tk.END,
                     text=self.t("tree_output"),
-                    values=("group",),
+                    values=("",),
+                    tags=("group",),
                     open=True,
                 )
 
@@ -456,8 +464,8 @@ class CapabilityNexusGUI:
                         output_node,
                         tk.END,
                         text=cap_id,
-                        values=("capability", mapped_target(cap_id)),
-                        tags=("mapped",) if cap_id in mapped else (),
+                        values=(mapped_target(cap_id),),
+                        tags=("capability", "mapped") if cap_id in mapped else ("capability",),
                     )
 
         self.device_tree.tag_configure("mapped", foreground="#2e7d32")
@@ -472,9 +480,9 @@ class CapabilityNexusGUI:
             return
 
         item = self.device_tree.item(selection[0])
-        values = item.get("values", [])
+        tags = item.get("tags", [])
 
-        if values and values[0] == "capability":
+        if "capability" in tags:
             source = item.get("text")
             self._open_map_dialog(source)
 
@@ -485,9 +493,9 @@ class CapabilityNexusGUI:
             return
 
         item = self.output_tree.item(selection[0])
-        values = item.get("values", [])
+        tags = item.get("tags", [])
 
-        if values and values[0] == "output_function":
+        if "output_function" in tags:
             text = item.get("text")
             target = text.split("  (")[0]
             self._open_reverse_map_dialog(target)
@@ -503,16 +511,19 @@ class CapabilityNexusGUI:
             return
 
         profile = config_io.load_profile()
-        mapped = set(profile.get("mappings", {}).keys())
+        mappings = profile.get("mappings", {})
+        mapped = set(mappings.keys())
 
         for item in self._iter_tree():
             node = self.device_tree.item(item)
-            values = node.get("values", []) or []
+            tags = node.get("tags", [])
 
-            if values and values[0] == "capability":
+            if "capability" in tags:
                 cap_id = node.get("text")
-                tags = ("mapped",) if cap_id in mapped else ()
-                self.device_tree.item(item, tags=tags)
+                m = mappings.get(cap_id)
+                target = config_io.mapping_desc(m) if m else ""
+                tags = ("capability", "mapped") if cap_id in mapped else ("capability",)
+                self.device_tree.item(item, tags=tags, values=(target,))
 
     def _iter_tree(self, parent=""):
         items = []
@@ -837,9 +848,9 @@ class CapabilityNexusGUI:
 
         while node_id:
             node = self.device_tree.item(node_id)
-            values = node.get("values", []) or []
+            tags = node.get("tags", []) or []
 
-            if values and values[0] == "device":
+            if "device" in tags:
                 device_text = node.get("text")
                 break
 
