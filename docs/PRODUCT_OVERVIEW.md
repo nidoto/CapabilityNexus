@@ -1,140 +1,331 @@
-# CapabilityNexus Product Overview / 产品说明
+# CapabilityNexus 产品说明
 
-## 1. Product Definition / 产品定义
+## 产品核心
 
-CapabilityNexus is an open-source middleware layer that moves real-world input
-capabilities into digital applications.
-
-CapabilityNexus 是一个开源中间层，将现实世界的输入能力带入游戏、模拟器、VR 应用和其他数字系统。
-
-It does not bind a device to a specific game. A device publishes capabilities;
-the mapping layer decides how those capabilities are used.
-
-它不把设备绑定到某个具体游戏。设备只发布能力，映射层决定能力如何使用。
-
-## 2. Capability Architecture / 能力架构
+CapabilityNexus 的核心是：
 
 ```text
-Hardware / 硬件
-    -> Protocol / 协议
-    -> StreamData / 数据流
-    -> Capability / 能力
-    -> Processor / 处理器
-    -> Transform / 逻辑变换
-    -> Mapping / 映射
-    -> Output / 输出
+任意设备 -> 任意功能 -> CapabilityNexus -> 任意功能 -> 任意设备
 ```
 
-This separation allows one physical source to drive several outputs and
-several sources to cooperate on one output.
+CapabilityNexus 是现实输入能力的抽象、处理、映射和路由平台。
 
-这种分层允许一个现实输入驱动多个输出，也允许多个输入共同驱动一个输出。
+设备只负责提供数据，应用程序只负责使用功能，CapabilityNexus 负责连接
+两者之间的能力关系。
 
-## 3. Supported Concepts / 支持的能力模型
+## 产品定位
 
-### Input Sources / 输入源
+CapabilityNexus 是一个开放式输入输出中间层。
 
-- Xbox/XInput controllers / Xbox 与 XInput 手柄
-- HID controllers, wheels and joysticks / HID 手柄、方向盘和摇杆
-- ESP32 and serial sensors / ESP32 与串口传感器
-- TCP, UDP and custom connections / TCP、UDP 和自定义连接
-- Bluetooth, FTMS and ANT devices / 蓝牙、FTMS 与 ANT 设备
+它不是：
 
-### Outputs / 输出
+- 某一种游戏的插件
+- 某一种手柄的专用工具
+- Xbox 模拟器
+- 硬件厂商驱动的替代品
 
-- XInput-compatible controller / XInput 兼容控制器
-- Keyboard / 键盘
-- Mouse / 鼠标
-- DualShock-compatible controller / DualShock 兼容控制器
-- Real-device feedback routes / 真实设备反馈路由
+它是：
 
-### Processing / 数据处理
+- 现实设备能力抽象层
+- 多设备输入融合引擎
+- 输入能力映射系统
+- 标准兼容输出路由器
+- 双向输入输出反馈中间层
 
-- Normalization / 归一化
-- Deadzone / 死区
-- Sensitivity / 灵敏度
-- Clamp / 限幅
-- Long press, double tap and hold repeat / 长按、连按和按住重复
-- Runtime mapping reload / 运行时映射刷新
-
-## 4. Advanced Product Direction / 高级产品方向
-
-The project is designed to grow into a multi-device and multi-application
-platform:
-
-项目设计目标是发展为多设备、多应用的现实输入平台：
-
-- Game-specific profiles / 游戏专属配置
-- Device capability packages / 设备能力包
-- Community device library / 社区设备库
-- Reverse request and feedback routing / 反向请求与反馈路由
-- Multiple physical sources into one compatible output / 多个现实设备汇入一个输出
-- One capability into multiple outputs / 一个能力分发到多个输出
-- Closed firmware with an open routing client / 闭源固件配合开源路由客户端
-
-These capabilities are tracked separately as runtime features, integrations and
-roadmap work. The documentation avoids presenting planned modules as completed
-features.
-
-这些能力会分别标记为运行时功能、集成功能和路线图工作，文档不会把计划功能误写成已经完成的功能。
-
-## 5. Firmware Boundary / 固件边界
-
-For proprietary hardware, the recommended boundary is:
-
-对于有专有算法的硬件，推荐采用以下边界：
+## 工作方式
 
 ```text
-Closed firmware / 闭源固件
-  sensor fusion, calibration, filtering, proprietary algorithm
-  传感器融合、校准、滤波、专有算法
-                |
-                v
-Final control values / 最终控制值
-                |
-Open CapabilityNexus client / 开源 CapabilityNexus 客户端
-  protocol, capability registration, mapping, forwarding
-  协议、能力注册、映射、转发
+现实设备
+    -> 设备协议
+    -> 数据流
+    -> 能力注册
+    -> 数据处理
+    -> 逻辑变换
+    -> 功能映射
+    -> 标准兼容输出
+    -> 游戏或应用
 ```
 
-The included ESP32 example sends signed final XInput-axis values in the range
-`-32768..32767` through `X` and `Y`. The client maps them to
-`control.right_x` and `control.right_y` without applying angle algorithms.
+输出方向也可以反向工作：
 
-示例 ESP32 固件通过 `X` 和 `Y` 发送范围为 `-32768..32767` 的有符号最终轴值，客户端将其映射为 `control.right_x` 和 `control.right_y`，不再执行角度算法。
+```text
+游戏或应用
+    -> 标准兼容设备请求
+    -> CapabilityNexus
+    -> 反馈能力
+    -> 现实设备
+```
 
-## 6. Bidirectional Feedback / 双向反馈
+## 能力抽象
 
-Games can send feedback to a compatible output. For example, a browser or game
-may request left and right rumble. CapabilityNexus captures these requests as
-device events and can display or route them.
+CapabilityNexus 不直接依赖具体硬件名称，而是使用能力名称描述数据。
 
-游戏可以向兼容输出发出反馈请求，例如左右震动。CapabilityNexus 将其捕获为设备事件，并支持显示或继续路由。
+例如：
 
-## 7. Device Visibility and Exclusive Mode / 设备可见性与独占模式
+```text
+motion.pitch
+motion.roll
+control.right_x
+control.right_y
+xbox.a
+xbox.left_trigger
+```
 
-Windows can expose both a physical controller and an XInput-compatible output.
-Some games automatically select the physical controller. HidHide can be used
-to hide the physical device from the game while allowing CapabilityNexus to
-read it.
+同一个能力可以被映射到不同功能，不同设备也可以提供相同能力。
 
-Windows 可能同时向游戏暴露实体手柄和 XInput 兼容输出，部分游戏会自动选择实体手柄。可以使用 HidHide 对游戏隐藏实体设备，同时允许 CapabilityNexus 读取。
+## 输入设备
 
-This is an optional system integration requiring user consent, administrator
-privileges and potentially a reboot. It is not part of the core routing engine.
+当前系统支持或预留以下输入类型：
 
-这是可选的系统集成功能，需要用户同意、管理员权限，并可能需要重启，不属于核心路由引擎本身。
+- XInput 控制器
+- HID 手柄、方向盘和摇杆
+- ESP32 与串口传感器
+- TCP、UDP 和自定义连接
+- Bluetooth、FTMS 和 ANT 设备
+- 可扩展的自定义设备
 
-## 8. Current Runtime Status / 当前运行状态
+## 输出设备
 
-| Area / 模块 | Status / 状态 |
-|---|---|
-| Event pipeline / 事件管线 | Operational / 可用 |
-| XInput-compatible output / XInput 兼容输出 | Operational with ViGEmBus / 依赖 ViGEmBus 可用 |
-| ESP32 serial input / ESP32 串口输入 | Operational / 可用 |
-| Device and output monitoring / 设备与输出监控 | Operational / 可用 |
-| Mapping and processors / 映射与处理器 | Operational / 可用 |
-| Reverse request capture / 反向请求捕获 | Operational / 可用 |
-| Dependency detection / 依赖检测 | Operational / 可用 |
-| HidHide session configuration / HidHide 独占配置 | In progress / 集成中 |
-| Hardware-in-the-loop tests / 硬件闭环测试 | Ongoing / 持续进行 |
+当前系统支持或预留以下输出类型：
+
+- XInput 兼容控制器
+- 键盘
+- 鼠标
+- DualShock 兼容控制器
+- 真实设备反馈输出
+
+这里的 XInput 兼容控制器表示一种标准兼容输出，不代表 CapabilityNexus
+是 Xbox 模拟器或 Xbox 产品。
+
+## 数据处理能力
+
+CapabilityNexus 提供以下通用处理能力：
+
+- 输入范围归一化
+- 死区处理
+- 灵敏度调整
+- 输出限幅
+- 长按检测
+- 连按检测
+- 按住重复触发
+- 一对多映射
+- 多对一映射
+- 运行时映射刷新
+
+## 固件与客户端边界
+
+对于包含专有算法的硬件，推荐采用以下边界：
+
+```text
+闭源固件
+    -> 传感器融合、校准、滤波、专有算法
+    -> 最终控制值
+    -> 开源 CapabilityNexus 客户端
+    -> 能力注册、映射和转发
+```
+
+这样可以让硬件厂商保留自己的算法，同时使用开放的客户端生态和标准兼容
+输出能力。
+
+## 双向反馈
+
+CapabilityNexus 不只处理输入，也可以捕获应用程序对输出设备发出的请求。
+
+例如，游戏向 XInput 兼容控制器发送震动请求时，客户端可以：
+
+- 记录请求来源
+- 记录左右马达数值
+- 在实时监控中显示
+- 映射到其他反馈设备
+
+## 设备可见性
+
+Windows 可能同时向应用程序暴露实体设备和 XInput 兼容输出。
+
+当游戏自动选择实体设备时，可以使用 HidHide 将实体设备对游戏隐藏，
+同时保留 CapabilityNexus 对实体设备的读取权限。
+
+HidHide 属于可选的 Windows 系统集成功能，需要用户同意、管理员权限，
+并且可能需要重启系统。
+
+## 当前状态
+
+- 核心事件管线：可用
+- XInput 兼容输出：依赖 ViGEmBus 可用
+- ESP32 串口输入：可用
+- 设备和输出实时监控：可用
+- 映射和处理器：可用
+- 反向请求捕获：可用
+- 运行时依赖检测：可用
+- HidHide 独占配置：集成中
+- 硬件闭环与游戏兼容性测试：持续进行
+
+---
+
+# CapabilityNexus Product Overview
+
+## Product Core
+
+The core idea of CapabilityNexus is:
+
+```text
+Any Device -> Any Capability -> CapabilityNexus -> Any Function -> Any Device
+```
+
+CapabilityNexus is a platform for abstracting, processing, mapping and routing
+real-world input capabilities.
+
+Devices provide data. Applications consume functions. CapabilityNexus connects
+the capability relationship between them.
+
+## Product Positioning
+
+CapabilityNexus is an open input/output middleware layer.
+
+It is not:
+
+- A plug-in for one specific game
+- A tool for one specific controller
+- An Xbox emulator
+- A replacement for vendor hardware drivers
+
+It is:
+
+- A real-world device capability abstraction layer
+- A multi-device input fusion engine
+- An input capability mapping system
+- A standard-compatible output router
+- A bidirectional input and feedback middleware layer
+
+## Processing Model
+
+```text
+Physical Device
+    -> Device Protocol
+    -> Data Stream
+    -> Capability Registry
+    -> Processing
+    -> Logic Transform
+    -> Function Mapping
+    -> Standard-compatible Output
+    -> Game or Application
+```
+
+The output direction can also work in reverse:
+
+```text
+Game or Application
+    -> Standard-compatible Device Request
+    -> CapabilityNexus
+    -> Feedback Capability
+    -> Physical Device
+```
+
+## Capability Abstraction
+
+CapabilityNexus describes data through capability identifiers instead of direct
+hardware names.
+
+Examples of capability identifiers include:
+
+```text
+motion.pitch
+motion.roll
+control.right_x
+control.right_y
+xbox.a
+xbox.left_trigger
+```
+
+One capability can be mapped to different functions, and different devices can
+provide the same capability.
+
+## Input Devices
+
+The current system supports or reserves integration points for:
+
+- XInput controllers
+- HID controllers, wheels and joysticks
+- ESP32 and serial sensors
+- TCP, UDP and custom connections
+- Bluetooth, FTMS and ANT devices
+- Extensible custom devices
+
+## Output Devices
+
+The current system supports or reserves integration points for:
+
+- XInput-compatible controllers
+- Keyboard
+- Mouse
+- DualShock-compatible controllers
+- Real-device feedback outputs
+
+The term XInput-compatible controller describes a standard-compatible output.
+It does not mean CapabilityNexus is an Xbox emulator or an Xbox product.
+
+## Processing Capabilities
+
+CapabilityNexus provides general-purpose processing features including:
+
+- Input range normalization
+- Deadzone processing
+- Sensitivity adjustment
+- Output clamping
+- Long-press detection
+- Double-tap detection
+- Hold-repeat triggering
+- One-to-many mapping
+- Many-to-one mapping
+- Runtime mapping reload
+
+## Firmware and Client Boundary
+
+For hardware containing proprietary algorithms, the recommended boundary is:
+
+```text
+Closed Firmware
+    -> Sensor fusion, calibration, filtering and proprietary algorithms
+    -> Final control values
+    -> Open CapabilityNexus Client
+    -> Capability registration, mapping and forwarding
+```
+
+This allows hardware vendors to keep their algorithms private while using an
+open client ecosystem and standard-compatible output capabilities.
+
+## Bidirectional Feedback
+
+CapabilityNexus processes more than input. It can also capture requests sent by
+applications to output devices.
+
+For example, when a game sends a rumble request to an XInput-compatible
+controller, the client can:
+
+- Record the request source
+- Record left and right motor values
+- Display the request in live monitoring
+- Map it to another feedback device
+
+## Device Visibility
+
+Windows may expose both physical devices and XInput-compatible outputs to an
+application.
+
+When a game automatically selects a physical device, HidHide can hide that
+physical device from the game while preserving CapabilityNexus access to it.
+
+HidHide is an optional Windows system integration. It requires user consent,
+administrator privileges and may require a system reboot.
+
+## Current Status
+
+- Core event pipeline: operational
+- XInput-compatible output: operational with ViGEmBus
+- ESP32 serial input: operational
+- Device and output live monitoring: operational
+- Mapping and processors: operational
+- Reverse request capture: operational
+- Runtime dependency detection: operational
+- HidHide exclusive configuration: in progress
+- Hardware-in-the-loop and game compatibility testing: ongoing

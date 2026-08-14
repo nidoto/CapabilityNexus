@@ -1,96 +1,90 @@
 # CapabilityNexus
 
-**现实输入能力抽象与路由平台**<br>
-**Real-world input capability abstraction and routing platform**
+## 中文说明
 
-CapabilityNexus connects physical devices, sensors and custom hardware to
-games and applications through a capability-based pipeline.
-
-CapabilityNexus 将现实设备、传感器和自制硬件，通过能力抽象管线连接到游戏与应用程序。
+### 产品核心
 
 ```text
-Physical Device / 现实设备
-          |
-          v
-Protocol + Capability Layer / 协议与能力层
-          |
-          v
-Processing + Mapping / 处理与映射
-          |
-          v
-XInput-compatible Controller / XInput 兼容控制器
-          |
-          v
-Game / Application / 游戏与应用
+任意设备 -> 任意功能 -> CapabilityNexus -> 任意功能 -> 任意设备
 ```
 
-## Product Positioning / 产品定位
+CapabilityNexus 是现实输入能力的抽象、处理、映射和路由平台。
 
-CapabilityNexus is an open-source input/output middleware layer. It is not an
-Xbox emulator, game modification or vendor-driver replacement.
+设备提供数据，应用程序使用功能，CapabilityNexus 负责连接两者之间的能力关系。
+
+### 产品定位
 
 CapabilityNexus 是开源的输入输出中间层，不是 Xbox 模拟器、游戏 Mod，也不替代硬件厂商驱动。
 
-## What It Can Do / 核心能力
+### 核心能力
 
-- Combine Xbox, HID, serial, Bluetooth, TCP, UDP, FTMS, ANT and custom inputs.
-  支持多种设备并行接入和组合。
-- Convert hardware data into named capabilities instead of game-specific code.
-  将硬件数据转换为与游戏解耦的能力。
-- Map sensors, buttons and controllers into XInput-compatible, keyboard, mouse
-  or DualShock-compatible outputs.
-  将传感器、按钮和手柄映射到标准兼容输出。
-- Process values with normalization, deadzone, sensitivity, clamp and logic
-  transforms.
-  支持归一化、死区、灵敏度、限幅和高级逻辑变换。
-- Capture reverse requests such as rumble from games and applications.
-  捕获游戏和应用发出的震动等反向请求。
-- Keep proprietary sensor fusion and calibration inside closed ESP32 firmware.
-  允许将传感器融合、校准和专有算法保留在闭源固件中。
-- Support runtime device monitoring, mapping reload and game-oriented workflows.
-  支持运行时设备监控、映射热更新和面向游戏的工作流。
+- 多种现实设备接入和组合
+- 能力注册与硬件解耦
+- 输入处理、映射和逻辑变换
+- XInput 兼容控制器、键盘、鼠标等标准兼容输出
+- 双向反馈和震动请求捕获
+- ESP32 闭源算法与开源客户端分离
+- 运行时设备、输入和输出监控
 
-## Example / 示例
+### 快速开始
 
-An Xbox One controller can provide buttons and triggers while an ESP32/BNO085
-device provides camera axes:
+1. 安装 Python 3.11 或更新版本。
+2. 安装必要的运行时依赖和驱动。
+3. 双击 `start.cmd`。
+4. 从设备树右键菜单添加输入设备。
+5. 双击能力节点配置映射。
+6. 在应用程序中使用 XInput 兼容控制器输出。
 
-Xbox One 手柄提供按钮和扳机，ESP32/BNO085 提供视角轴：
+### 文档
+
+- [产品说明](docs/PRODUCT_OVERVIEW.md)
+- [安装指南](docs/INSTALLATION.md)
+- [系统架构](docs/ARCHITECTURE.md)
+- [开发日志](docs/DEVELOPMENT_LOG_V1.7.0.md)
+- [第三方声明](THIRD_PARTY_NOTICES.md)
+
+## English
+
+### Product Core
 
 ```text
-xbox.a              -> button_a
-xbox.left_trigger   -> left_trigger
-ESP32 X             -> control.right_x -> right_x
-ESP32 Y             -> control.right_y -> right_y
+Any Device -> Any Capability -> CapabilityNexus -> Any Function -> Any Device
 ```
 
-The ESP32 firmware performs orientation, calibration, clamping and conversion
-to final signed XInput axis values. The open client forwards those values.
+CapabilityNexus is an open platform for abstracting, processing, mapping and
+routing real-world input capabilities.
 
-ESP32 固件负责姿态计算、校准、限幅和最终 XInput 轴值转换，开源客户端负责协议接收、能力注册、映射和转发。
+Devices provide data, applications consume functions, and CapabilityNexus
+connects the capability relationship between them.
 
-## Quick Start / 快速开始
+### Product Positioning
 
-1. Install Python 3.11 or newer. / 安装 Python 3.11 或更新版本。
-2. Install the required runtime drivers. / 安装必要的运行时驱动。
-3. Double-click `start.cmd`. / 双击 `start.cmd`。
-4. Add devices from the device-tree context menu. / 从设备树右键菜单添加设备。
-5. Configure mappings by double-clicking capabilities. / 双击能力配置映射。
-6. Configure the game to use the XInput-compatible controller. / 在游戏中选择兼容控制器。
+CapabilityNexus is open-source input/output middleware. It is not an Xbox
+emulator, a game modification or a replacement for vendor hardware drivers.
 
-## Documentation / 文档
+### Core Capabilities
 
-- [Product Overview / 产品说明](docs/PRODUCT_OVERVIEW.md)
-- [Installation / 安装指南](docs/INSTALLATION.md)
-- [Architecture / 系统架构](docs/ARCHITECTURE.md)
-- [Development Log / 开发日志](docs/DEVELOPMENT_LOG_V1.7.0.md)
-- [Documentation Index / 文档索引](docs/README.md)
-- [Third-party Notices / 第三方声明](THIRD_PARTY_NOTICES.md)
+- Connect and combine multiple physical input sources
+- Decouple capabilities from hardware brands
+- Process, map and transform input capabilities
+- Provide XInput-compatible, keyboard and mouse outputs
+- Capture bidirectional feedback and rumble requests
+- Keep proprietary ESP32 algorithms inside closed firmware
+- Monitor devices, inputs and outputs at runtime
 
-## Status / 当前状态
+### Quick Start
 
-The runtime pipeline, XInput-compatible output, ESP32 serial input, monitoring,
-mapping and reverse-request capture are operational. HidHide detection is
-implemented; its game-exclusive configuration workflow is being integrated.
+1. Install Python 3.11 or newer.
+2. Install required runtime dependencies and drivers.
+3. Double-click `start.cmd`.
+4. Add input devices from the device-tree context menu.
+5. Double-click capability nodes to configure mappings.
+6. Use the XInput-compatible output in the target application.
 
-当前运行管线、XInput 兼容输出、ESP32 串口输入、实时监控、映射和反向请求捕获已经可用。HidHide 依赖检测已经完成，游戏独占配置流程正在集成。
+### Documentation
+
+- [Product Overview](docs/PRODUCT_OVERVIEW.md)
+- [Installation](docs/INSTALLATION.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development Log](docs/DEVELOPMENT_LOG_V1.7.0.md)
+- [Third-party Notices](THIRD_PARTY_NOTICES.md)
