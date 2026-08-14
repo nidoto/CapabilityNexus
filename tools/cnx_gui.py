@@ -2446,6 +2446,7 @@ class CapabilityNexusGUI:
         btn_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
         ttk.Button(btn_frame, text=self.t("game_profiles_activate"), command=select_active).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text=self.t("game_profiles_new"), command=new_profile).pack(side=tk.LEFT, padx=3)
+        ttk.Button(btn_frame, text=self.t("game_profiles_tune"), command=self.show_curve_tuner).pack(side=tk.LEFT, padx=3)
         ttk.Button(btn_frame, text=self.t("dlg_close"), command=dialog.destroy).pack(side=tk.RIGHT, padx=3)
 
     def _reload_profile_config(self):
@@ -2464,6 +2465,204 @@ class CapabilityNexusGUI:
             self.app.request_handler.set_mappings(profile.get("mappings", {}))
         self.refresh_devices()
         self.log(self.t("game_profiles_loaded").format(config_io.get_active_profile()))
+
+    def show_curve_tuner(self):
+        """曲线调优对话框：可视化编辑陀螺仪响应曲线（档位/死区/角度范围）。"""
+        from tools import config_io
+        import json
+
+        profile_name = config_io.get_active_profile()
+        profile = config_io.load_profile_named(profile_name)
+        processors = profile.get("processors", {})
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"{self.t('curve_tuner_title')} - {profile_name}")
+        dialog.geometry("780x560")
+
+        # 顶部说明
+        ttk.Label(
+            dialog,
+            text=self.t("curve_tuner_hint").format(profile_name),
+            wraplength=740,
+            foreground="#94a3b8",
+        ).pack(fill=tk.X, padx=12, pady=(10, 6))
+
+        # 主区域：轴选择 + 预览 + 参数编辑
+        main = ttk.Frame(dialog)
+        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+
+        # 左侧：轴选择与参数
+        left = ttk.Frame(main)
+        left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
+
+        ttk.Label(left, text=self.t("curve_tuner_axis")).pack(anchor=tk.W, pady=(0, 2))
+
+        axis_var = tk.StringVar(value="control.right_x")
+        self._curve_axes = {}
+
+        for cap_id in ("control.right_x", "control.right_y"):
+            proc_cfg = None
+            for p in processors.get(cap_id, []):
+                if p.get("type") == "curve":
+                    proc_cfg = p
+                    break
+            self._curve_axes[cap_id] = proc_cfg
+
+        # 只有存在 curve 配置的轴才可选
+        available = [c for c, cfg in self._curve_axes.items() if cfg]
+        if not available:
+            ttk.Label(
+                dialog,
+                text=self.t("curve_tuner_no_curve"),
+                foreground="#c0392b",
+            ).pack(padx=12, pady=20)
+            return
+
+        for cap_id in available:
+            label = {
+                "control.right_x": self.t("curve_tuner_rx"),
+                "control.right_y": self.t("curve_tuner_ry"),
+            }.get(cap_id, cap_id)
+            ttk.Radiobutton(
+                left,
+                text=label,
+                variable=axis_var,
+                value=cap_id,
+                command=lambda: self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var),
+            ).pack(anchor=tk.W, pady=1)
+
+        params = ttk.LabelFrame(left, text=self.t("curve_tuner_params"))
+        params.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Label(params, text=self.t("curve_tuner_deadzone")).grid(row=0, column=0, sticky=tk.W, padx=6, pady=3)
+        deadzone_var = tk.StringVar(value="1.5")
+        ttk.Entry(params, textvariable=deadzone_var, width=8).grid(row=0, column=1, padx=6, pady=3)
+
+        ttk.Label(params, text=self.t("curve_tuner_maxdeg")).grid(row=1, column=0, sticky=tk.W, padx=6, pady=3)
+        maxdeg_var = tk.StringVar(value="12")
+        ttk.Entry(params, textvariable=maxdeg_var, width=8).grid(row=1, column=1, padx=6, pady=3)
+
+        # 右侧：曲线预览 Canvas
+        right = ttk.Frame(main)
+        right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(right, width=420, height=380, bg="#0f172a", highlightthickness=1, highlightbackground="#334155")
+        canvas.pack(fill=tk.BOTH, expand=True)
+
+        # 底部：状态 + 保存
+        bottom = ttk.Frame(dialog)
+        bottom.pack(fill=tk.X, padx=12, pady=(0, 8))
+
+        status_var = tk.StringVar(value="")
+        ttk.Label(bottom, textvariable=status_var, foreground="#2563eb").pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        def save():
+            try:
+                deadzone = float(deadzone_var.get())
+                maxdeg = float(maxdeg_var.get())
+            except ValueError:
+                messagebox.showwarning(self.t("menu_game_profiles"), self.t("curve_tuner_invalid_num"))
+                return
+
+            cap_id = axis_var.get()
+            cfg = self._curve_axes.get(cap_id)
+            if not cfg:
+                return
+
+            # 更新死区与最大角度；档位百分比按角度比例缩放
+            old_max = float(cfg.get("max_degrees", 30))
+            old_points = cfg.get("points") or []
+            new_points = []
+            for angle, pct in old_points:
+                new_points.append([round(angle / old_max * maxdeg, 2), pct])
+
+            cfg["deadzone"] = deadzone
+            cfg["max_degrees"] = maxdeg
+            cfg["points"] = new_points
+            self._curve_axes[cap_id] = cfg
+
+            # 写回配置
+            profile["processors"][cap_id] = [cfg]
+            config_io.save_profile_named(profile_name, profile)
+            self._reload_profile_config()
+            status_var.set(self.t("curve_tuner_saved"))
+            self.log(f"Curve tuned: {cap_id} (deadzone={deadzone}, max={maxdeg})")
+            self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var)
+
+        ttk.Button(bottom, text=self.t("dlg_save"), command=save).pack(side=tk.RIGHT, padx=3)
+        ttk.Button(bottom, text=self.t("dlg_close"), command=dialog.destroy).pack(side=tk.RIGHT, padx=3)
+
+        self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var)
+
+    def _curve_redraw(self, canvas, axis_var, deadzone_var, maxdeg_var, status_var):
+        """在 Canvas 上绘制当前曲线的阶梯/线性预览。"""
+        from processors.curve import CurveProcessor
+
+        cap_id = axis_var.get()
+        cfg = self._curve_axes.get(cap_id)
+        if not cfg:
+            return
+
+        try:
+            deadzone = float(deadzone_var.get())
+            maxdeg = float(maxdeg_var.get())
+        except ValueError:
+            return
+
+        points = cfg.get("points") or []
+        mode = cfg.get("mode", "step")
+
+        cp = CurveProcessor(max_degrees=maxdeg, deadzone=deadzone, points=points, mode=mode)
+
+        canvas.delete("all")
+        W = canvas.winfo_width() or 420
+        H = canvas.winfo_height() or 380
+        margin = 40
+
+        # 坐标轴
+        mid_x = margin
+        mid_y = H // 2
+        canvas.create_line(margin, mid_y, W - 10, mid_y, fill="#475569")
+        canvas.create_line(margin, 10, margin, H - 10, fill="#475569")
+
+        def px(angle):
+            return margin + (angle + maxdeg) / (2 * maxdeg) * (W - margin - 10)
+
+        def py(pct):
+            return mid_y - pct / 100.0 * (H - 30) / 2
+
+        # 网格参考线
+        canvas.create_line(margin, 10, margin, H - 10, fill="#334155", dash=(4, 4))
+        canvas.create_line(px(0), 10, px(0), H - 10, fill="#334155", dash=(4, 4))
+        for pct in (-80, -50, -20, 20, 50, 80):
+            y = py(pct)
+            if 10 <= y <= H - 10:
+                canvas.create_line(margin, y, W - 10, y, fill="#1e293b")
+
+        # 采样绘制曲线
+        steps = 100
+        prev = None
+        for i in range(steps + 1):
+            angle = -maxdeg + (2 * maxdeg) * i / steps
+            value = cp.process(round(angle / 180 * 32767))
+            pct = value / 32767.0 * 100.0
+            x = px(angle)
+            y = py(pct)
+            if prev is not None:
+                canvas.create_line(prev[0], prev[1], x, y, fill="#38bdf8", width=2)
+            prev = (x, y)
+
+        # 标注死区
+        dz_x = px(deadzone)
+        canvas.create_line(dz_x, 10, dz_x, H - 10, fill="#f59e0b", dash=(2, 2))
+        canvas.create_line(px(-deadzone), 10, px(-deadzone), H - 10, fill="#f59e0b", dash=(2, 2))
+        canvas.create_text(margin + 30, 20, text=self.t("curve_tuner_dz").format(deadzone), fill="#f59e0b", anchor=tk.W, font=("Segoe UI", 8))
+
+        # 轴标签
+        canvas.create_text(W - 20, mid_y - 12, text="+%g°" % maxdeg, fill="#94a3b8", anchor=tk.E)
+        canvas.create_text(margin + 20, mid_y + 16, text="-%g°" % maxdeg, fill="#94a3b8", anchor=tk.W)
+
+        status_var.set(f"{self.t('curve_tuner_mode')}: {mode}  {self.t('curve_tuner_maxdeg')}: {maxdeg}°  {self.t('curve_tuner_deadzone')}: {deadzone}°")
 
     def show_about(self):
         messagebox.showinfo(self.t("about_title"), self.t("about_body"))

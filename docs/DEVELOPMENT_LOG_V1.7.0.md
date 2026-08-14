@@ -123,6 +123,11 @@ boundaries and product documentation.
   - Live chain verified: ESP32 gyro -> control.right_x/y -> curve processor
     (step bands) -> virtual XInput-compatible controller, with correct
     horizontal/vertical response and 1.5 deg deadzone filtering
+- Gyro curve tuning GUI (Mappings > Game Profiles > Tune Curve)
+  - Visual step/linear curve preview with deadzone and max-angle markers
+  - Edits deadzone, max angle and rescales band points for the active game
+    profile's X and Y axes; saves and applies instantly without editing JSON
+  - Verified: save -> engine reload keeps the tuned curve parameters
 
 ## ESP32 Boundary
 
