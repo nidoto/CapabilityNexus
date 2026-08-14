@@ -1,0 +1,17 @@
+{
+    "transforms": [
+
+        {
+            "source": "xbox.lb",
+            "type": "hold",
+            "target": "xbox.rb"
+        },
+
+        {
+            "source": "xbox.back",
+            "type": "tap",
+            "target": "xbox.start"
+        }
+
+    ]
+}

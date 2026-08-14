@@ -229,6 +229,55 @@ event_bus.subscribe(
 
 
 #
+# Transform Layer（用户逻辑表）
+#
+
+from mapping.transform import TransformLayer
+
+transform_layer = TransformLayer(
+    event_bus
+)
+
+
+def transform_receive(
+    processed
+):
+
+
+    outputs = transform_layer.process(
+        processed
+    )
+
+
+    for output in outputs:
+
+        if output is processed:
+
+            continue
+
+
+        print(
+            "[Transform]",
+            processed.id,
+            "->",
+            output.id
+        )
+
+
+        event_bus.publish(
+            output
+        )
+
+
+
+event_bus.subscribe(
+    ProcessedChannel,
+    transform_receive
+)
+
+
+
+#
 # Mapping Engine
 #
 

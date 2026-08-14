@@ -11,7 +11,8 @@ class ProcessedChannel(Channel):
         category,
         value,
         sequence=None,
-        capability=None
+        capability=None,
+        transformed=False
     ):
 
 
@@ -30,6 +31,9 @@ class ProcessedChannel(Channel):
             True
 
         )
+
+
+        self.transformed = transformed
 
 
 
