@@ -97,18 +97,7 @@ class CapabilityNexusGUI:
         main.add(right, weight=2)
 
         self._build_device_tree(left)
-
-        notebook = ttk.Notebook(right)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-
-        self.output_tab = ttk.Frame(notebook)
-        self.mapping_tab = ttk.Frame(notebook)
-
-        notebook.add(self.output_tab, text=self.t("tab_outputs"))
-        notebook.add(self.mapping_tab, text=self.t("tab_mappings"))
-
-        self._build_output_panel(self.output_tab)
-        self._build_mapping_panel(self.mapping_tab)
+        self._build_output_panel(right)
 
         self._build_log_panel(self.root)
 
@@ -198,7 +187,7 @@ class CapabilityNexusGUI:
 
     def _build_output_panel(self, parent):
         box = ttk.LabelFrame(parent, text=self.t("tree_outputs"))
-        box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         self.output_list = tk.Listbox(box, height=10)
         self.output_list.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
@@ -305,17 +294,6 @@ class CapabilityNexusGUI:
         self.refresh_outputs()
         self.log(f"Removed output: {removed.get('name', removed.get('id'))}")
 
-    def _build_mapping_panel(self, parent):
-        box = ttk.LabelFrame(parent, text=self.t("panel_mappings"))
-        box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-
-        self.map_text = tk.Text(box, state=tk.DISABLED)
-        self.map_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
-
-        btns = ttk.Frame(box)
-        btns.pack(fill=tk.X, padx=6, pady=4)
-        ttk.Button(btns, text=self.t("panel_remove_mapping"), command=self.remove_mapping).pack(side=tk.LEFT, padx=2)
-
     def _build_log_panel(self, parent):
         logbox = ttk.LabelFrame(parent, text=self.t("panel_log"))
         logbox.pack(fill=tk.X, padx=8, pady=(0, 8))
@@ -420,13 +398,29 @@ class CapabilityNexusGUI:
     #
 
     def refresh_mappings(self):
-        profile = config_io.load_profile()
+        # 映射状态已由设备树显示（已映射 = 绿色）
+        # 这里只需更新设备树节点的映射标记
+        if not hasattr(self, "device_tree"):
+            return
 
-        self.map_text.config(state=tk.NORMAL)
-        self.map_text.delete("1.0", tk.END)
-        for source, mapping in profile.get("mappings", {}).items():
-            self.map_text.insert(tk.END, f"{source} -> {config_io.mapping_desc(mapping)}\n")
-        self.map_text.config(state=tk.DISABLED)
+        profile = config_io.load_profile()
+        mapped = set(profile.get("mappings", {}).keys())
+
+        for item in self._iter_tree():
+            node = self.device_tree.item(item)
+            values = node.get("values", []) or []
+
+            if values and values[0] == "capability":
+                cap_id = node.get("text")
+                tags = ("mapped",) if cap_id in mapped else ()
+                self.device_tree.item(item, tags=tags)
+
+    def _iter_tree(self, parent=""):
+        items = []
+        for item in self.device_tree.get_children(parent):
+            items.append(item)
+            items.extend(self._iter_tree(item))
+        return items
 
     def _open_map_dialog(self, source):
         dialog = tk.Toplevel(self.root)
