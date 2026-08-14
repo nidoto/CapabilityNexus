@@ -52,3 +52,12 @@ axis values. The open client forwards final control values.
 - Implement HidHide session-blacklist configuration
 - Add automated hardware-in-the-loop tests
 - Test multiple games and controller selection behavior
+
+## Product Documentation Update
+
+- Added bilingual product positioning and capability overview.
+- Clarified the distinction between the open routing client and closed firmware
+  algorithms.
+- Clarified that the product provides XInput-compatible controller output and
+  is not an Xbox emulator.
+- Added installation, dependency and third-party distribution guidance.
