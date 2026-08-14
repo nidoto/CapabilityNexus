@@ -9,6 +9,24 @@ import socket
 import threading
 
 
+def _is_local(ip):
+    """判断是否为局域网私有 IP。"""
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        a, b = int(parts[0]), int(parts[1])
+    except ValueError:
+        return False
+    return (
+        a == 10
+        or (a == 172 and 16 <= b <= 31)
+        or a == 192 and b == 168
+        or a == 100 and 64 <= b <= 127
+        or a == 169 and b == 254  # link-local，不太可能
+    )
+
+
 def get_local_ips():
     """返回本机局域网 IPv4 地址列表。"""
     ips = set()
@@ -33,6 +51,21 @@ def get_local_ips():
         pass
 
     return sorted(ips)
+
+
+def best_local_ip():
+    """返回最适合局域网访问的 IP（优先局域网私有地址）。"""
+    ips = get_local_ips()
+    if not ips:
+        return ""
+
+    # 优先局域网私有地址
+    for ip in ips:
+        if _is_local(ip):
+            return ip
+
+    # 兜底：第一个
+    return ips[0]
 
 
 class WebService:
@@ -91,6 +124,7 @@ class WebService:
             "running": running,
             "port": self.port,
             "ips": ips,
+            "best_ip": best_local_ip(),
             "page_urls": [f"http://{ip}:{self.port}/" for ip in ips],
             "ws_urls": [f"ws://{ip}:{self.port}/ws" for ip in ips],
         }

@@ -1122,10 +1122,19 @@ class CapabilityNexusGUI:
                 command=lambda: toggle_web(),
             )
             if running:
-                urls = "  ".join(info["page_urls"])
-                self._web_ip_var.set(urls)
+                # 优先显示最适合的局域网 IP
+                best = info.get("best_ip") or ""
+                if best:
+                    self._web_ip_var.set(f"http://{best}:{info['port']}/")
+                else:
+                    urls = "  ".join(info["page_urls"])
+                    self._web_ip_var.set(urls)
             else:
-                self._web_ip_var.set("")
+                # 未运行时也提示可用的本机 IP
+                best = info.get("best_ip") or ""
+                self._web_ip_var.set(
+                    f"IP: {best}" if best else ""
+                )
 
         def toggle_web():
             if self._web_service.is_running():

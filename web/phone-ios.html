@@ -235,22 +235,18 @@ function setStatus(text, ok) {
   statusEl.className = "status " + (ok ? "ok" : "err");
 }
 
+let autoReconnect = true;
+
 function connect() {
-  // 地址为空时，用当前页面的主机（自动匹配 PC IP + 端口）
-  let url = addrInput.value.trim();
-  if (!url) {
-    url = "ws://" + window.location.host + "/ws";
-    addrInput.value = url;
-  }
-  if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
-    url = "ws://" + url + ":8765/ws";
-    addrInput.value = url;
-  }
+  // 始终使用当前页面主机（自动匹配 PC IP + 端口）
+  let url = "ws://" + window.location.host + "/ws";
+  addrInput.value = url;
   if (!url) return;
   try {
     ws = new WebSocket(url);
   } catch (e) {
     setStatus("连接失败: " + e.message, false);
+    scheduleReconnect();
     return;
   }
   ws.onopen = () => {
@@ -260,19 +256,35 @@ function connect() {
   };
   ws.onclose = () => {
     connected = false;
-    setStatus("已断开", false);
+    setStatus("已断开，自动重连中...", false);
+    scheduleReconnect();
   };
   ws.onerror = (e) => {
-    setStatus("错误: " + (e.message || "连接错误"), false);
+    setStatus("连接错误", false);
   };
 }
 
-// 页面加载后：用当前主机预填连接地址
+function scheduleReconnect() {
+  if (!autoReconnect) return;
+  setTimeout(function() {
+    if (!connected) {
+      try { connect(); } catch (e) {}
+    }
+  }, 2000);
+}
+
+// 页面加载后自动连接（iOS 需用户授权传感器后才启动 WS）
 (function() {
   addrInput.value = "ws://" + window.location.host + "/ws";
+  setStatus("自动连接中...", false);
+  connect();
 })();
 
-document.getElementById("connectBtn").onclick = connect;
+// 连接按钮变为"手动重连"（一般不需要）
+document.getElementById("connectBtn").onclick = function() {
+  autoReconnect = true;
+  connect();
+};
 
 // 模式切换
 document.getElementById("modeWheel").onclick = () => setMode("wheel");
