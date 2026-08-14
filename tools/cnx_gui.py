@@ -796,7 +796,9 @@ class CapabilityNexusGUI:
 
             device_info = devices[index[0]]
 
-            if conn_key == "bluetooth" and not device_info.get("is_ble"):
+            # Bluetooth (RFCOMM): 接受任何蓝牙设备
+            # FTMS (BLE trainer): 要求 BLE 设备
+            if conn_key == "bluetooth":
                 on_picked(device_info)
                 dialog.destroy()
             elif conn_key == "ftms" and device_info.get("is_ble"):
