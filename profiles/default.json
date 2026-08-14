@@ -1,45 +1,30 @@
 {
     "mappings": {
-
-        "motion.pitch": "right_x",
-
+        "motion.pitch": [
+            {
+                "target": "right_x",
+                "gain": 1.0,
+                "return_to_center": false
+            }
+        ],
         "motion.roll": "right_y",
-
         "xbox.left_x": "left_x",
-
         "xbox.left_y": "left_y",
-
         "xbox.left_trigger": "left_trigger",
-
         "xbox.right_trigger": "right_trigger",
-
         "xbox.a": "button_a",
-
         "xbox.b": "button_b",
-
         "xbox.x": "button_x",
-
         "xbox.y": "button_y",
-
         "xbox.lb": "button_lb",
-
         "xbox.rb": "button_rb",
-
         "xbox.ls": "button_ls",
-
         "xbox.rs": "button_rs",
-
         "xbox.start": "button_start",
-
         "xbox.back": "button_back",
-
         "xbox.dpad_up": "button_dpad_up",
-
         "xbox.dpad_down": "button_dpad_down",
-
         "xbox.dpad_left": "button_dpad_left",
-
         "xbox.dpad_right": "button_dpad_right"
-
     }
 }

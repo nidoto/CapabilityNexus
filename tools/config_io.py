@@ -85,6 +85,9 @@ def mapping_desc(mapping):
     if isinstance(mapping, str):
         return mapping
 
+    if isinstance(mapping, list):
+        return "; ".join(mapping_desc(m) for m in mapping)
+
     target = mapping.get("target", "?")
     parts = [target]
 

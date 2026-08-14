@@ -372,17 +372,34 @@ def cmd_map_capability():
     }
 
     profile = load_profile()
-    profile["mappings"][source] = mapping
+    existing = profile["mappings"].get(source)
+
+    if isinstance(existing, list):
+        profile["mappings"][source] = existing + [mapping]
+    elif isinstance(existing, dict):
+        profile["mappings"][source] = [existing, mapping]
+    else:
+        profile["mappings"][source] = [mapping]
+
     save_profile(profile)
 
     print()
     print(f"[OK] {source} -> {target} (gain={gain}, return_to_center={return_center})")
+
+    add_more = ask_bool(f"Add another output for {source}?", default=False)
+    if add_more:
+        cmd_map_capability()
+        return
+
     print(f"     saved to {PROFILE_PATH}")
 
 
 def _mapping_desc(mapping):
     if isinstance(mapping, str):
         return mapping
+
+    if isinstance(mapping, list):
+        return "; ".join(_mapping_desc(m) for m in mapping)
 
     target = mapping.get("target", "?")
     parts = [target]

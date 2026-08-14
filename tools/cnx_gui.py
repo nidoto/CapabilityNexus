@@ -282,7 +282,13 @@ class CapabilityNexusGUI:
                 target_combo["values"] = list(device.targets.keys())
 
                 if current:
-                    tgt = current if isinstance(current, str) else current.get("target")
+                    if isinstance(current, list):
+                        tgt = current[0].get("target") if current else None
+                    elif isinstance(current, str):
+                        tgt = current
+                    else:
+                        tgt = current.get("target")
+
                     if tgt in device.targets:
                         target_var.set(tgt)
                         return
@@ -315,19 +321,40 @@ class CapabilityNexusGUI:
             except ValueError:
                 gain = 1.0
 
-            profile = config_io.load_profile()
-            profile["mappings"][source] = {
+            new_mapping = {
                 "target": target,
                 "gain": gain,
                 "return_to_center": return_var.get(),
             }
+
+            profile = config_io.load_profile()
+            existing = profile["mappings"].get(source)
+
+            if append_var.get():
+                if isinstance(existing, list):
+                    profile["mappings"][source] = existing + [new_mapping]
+                elif isinstance(existing, dict):
+                    profile["mappings"][source] = [existing, new_mapping]
+                else:
+                    profile["mappings"][source] = [new_mapping]
+            else:
+                profile["mappings"][source] = [new_mapping]
+
             config_io.save_profile(profile)
 
             self.refresh_mappings()
             self.log(f"{self.t('log_mapped')} {source} -> {target}")
             dialog.destroy()
 
-        ttk.Button(dialog, text=self.t("dlg_apply"), command=apply).pack(padx=8, pady=10)
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, padx=8, pady=4)
+        append_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            btn_frame,
+            text="Add as extra output (one-to-many)",
+            variable=append_var,
+        ).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text=self.t("dlg_apply"), command=apply).pack(side=tk.RIGHT)
 
     def remove_mapping(self):
         profile = config_io.load_profile()
