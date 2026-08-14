@@ -66,8 +66,30 @@ class DeviceManager:
                     resolved.append((d, config_entry, "config"))
                     print("[DeviceManager] Matched config:", config_entry.get("name"))
                 elif kind == "product":
-                    resolved.append((d, entry, "auto"))
-                    print("[DeviceManager] Identified product:", entry.get("name"))
+                    # 自动识别的成品设备：登记到 config，供设备树显示和映射
+                    auto_entry = {
+                        "name": entry.get("name", entry.get("id")),
+                        "driver": entry.get("driver", d.get("type")),
+                        "package": entry.get("package", ""),
+                        "auto_connected": True,
+                    }
+
+                    if d.get("type") == "xinput":
+                        auto_entry["index"] = d.get("index", 0)
+
+                    # 去重：同 driver + index 已存在则不重复添加
+                    duplicate = any(
+                        c.get("driver") == auto_entry["driver"]
+                        and c.get("index") == auto_entry.get("index")
+                        for c in self._config
+                    )
+
+                    if not duplicate:
+                        self._config.append(auto_entry)
+                        self.save_config()
+                        print("[DeviceManager] Auto-connected product:", entry.get("name"))
+
+                    resolved.append((d, auto_entry, "config"))
                 else:
                     print(
                         "[DeviceManager] Template device:",

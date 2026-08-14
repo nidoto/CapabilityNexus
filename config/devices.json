@@ -1,3 +1,11 @@
 {
-    "devices": []
+    "devices": [
+        {
+            "name": "Microsoft Xbox One",
+            "driver": "xinput",
+            "package": "xbox_one",
+            "auto_connected": true,
+            "index": 0
+        }
+    ]
 }
