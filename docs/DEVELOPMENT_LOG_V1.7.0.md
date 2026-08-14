@@ -108,6 +108,14 @@ boundaries and product documentation.
   - The startup dependency check distinguishes driver vs Python-package gaps:
     missing drivers offer to open Driver Management (System > Driver
     Management) from the warning dialog
+- Hardware-in-the-loop test script
+  - `tools/hil_test.py` verifies the real hardware chain: XInput controller
+    detection/state, ESP32 serial FRAME/X/Y stream, and the engine pipeline
+    with virtual XInput output
+  - Run with `py -3 tools/hil_test.py`; pass flags `--esp32` / `--xinput` to
+    test a single subsystem
+  - Engine-pipeline portion verified (virtual output + event publishing);
+    hardware portions require the ESP32 on COM3 and a connected controller
 
 ## ESP32 Boundary
 
