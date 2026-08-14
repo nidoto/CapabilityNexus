@@ -36,7 +36,13 @@ class ProcessorManager:
             {}
         )
 
+        self.load_dict(configs)
 
+    def load_dict(
+        self,
+        configs
+    ):
+        """从处理器配置字典加载（游戏专属配置复用）。"""
 
         for capability_id, pipeline in configs.items():
 

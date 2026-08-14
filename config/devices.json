@@ -1,11 +1,37 @@
 {
     "devices": [
         {
+            "name": "New Device",
+            "driver": "xinput",
+            "package": "xbox_one",
+            "use_library": true,
+            "index": 2,
+            "library_id": "microsoft-xbox-one"
+        },
+        {
             "name": "Microsoft Xbox One",
             "driver": "xinput",
             "package": "xbox_one",
             "auto_connected": true,
             "index": 0
+        },
+        {
+            "name": "New Device",
+            "driver": "serial",
+            "package": "motion_demo",
+            "use_library": true,
+            "connection": {
+                "type": "serial",
+                "port": "COM3",
+                "baudrate": 115200
+            }
+        },
+        {
+            "name": "Microsoft Xbox One",
+            "driver": "xinput",
+            "package": "xbox_one",
+            "auto_connected": true,
+            "index": 1
         }
     ]
 }

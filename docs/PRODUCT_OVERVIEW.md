@@ -157,7 +157,7 @@ HidHide 属于可选的 Windows 系统集成功能，需要用户同意、管理
 - 映射和处理器：可用
 - 反向请求捕获：可用
 - 运行时依赖检测：可用
-- HidHide 独占配置：集成中
+- 游戏独占模式（HidHide 隐藏物理手柄）：可用
 - 硬件闭环与游戏兼容性测试：持续进行
 
 ---
@@ -327,5 +327,5 @@ administrator privileges and may require a system reboot.
 - Mapping and processors: operational
 - Reverse request capture: operational
 - Runtime dependency detection: operational
-- HidHide exclusive configuration: in progress
+- Game-exclusive mode (HidHide hiding physical controllers): operational
 - Hardware-in-the-loop and game compatibility testing: ongoing

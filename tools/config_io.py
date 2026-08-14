@@ -8,6 +8,8 @@ CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "devices.json")
 OUTPUTS_PATH = os.path.join(PROJECT_ROOT, "config", "outputs.json")
 PACKAGES_PATH = os.path.join(PROJECT_ROOT, "packages")
 PROFILE_PATH = os.path.join(PROJECT_ROOT, "profiles", "default.json")
+PROFILES_DIR = os.path.join(PROJECT_ROOT, "profiles")
+ACTIVE_PROFILE_PATH = os.path.join(PROJECT_ROOT, "config", "active_profile.json")
 
 
 def load_config():
@@ -49,9 +51,79 @@ def save_config(data):
 
 
 def load_profile():
+    return load_profile_named(get_active_profile())
+
+
+def save_profile(data):
+    save_profile_named(get_active_profile(), data)
+
+
+#
+# 多游戏配置（profiles/<game>.json）
+#
+
+
+def _profile_scan_dirs():
+    """profiles/ 根目录 + 本地未上传目录 profiles/local/"""
+    local_dir = os.path.join(PROFILES_DIR, "local")
+    return [d for d in (PROFILES_DIR, local_dir) if os.path.isdir(d)]
+
+
+def list_profiles():
+    """返回 profiles/（含 local/）下所有 .json 配置名（不含扩展名）。"""
+    names = []
+    for directory in _profile_scan_dirs():
+        for name in os.listdir(directory):
+            if name.endswith(".json"):
+                names.append(name[:-5])
+    return sorted(set(names)) or ["default"]
+
+
+def _profile_path(name):
+    """定位配置路径：local/ 优先，其次 profiles/ 根目录。"""
+    local_dir = os.path.join(PROFILES_DIR, "local")
+    if name:
+        local_path = os.path.join(local_dir, f"{name}.json")
+        if os.path.exists(local_path):
+            return local_path
+        root_path = os.path.join(PROFILES_DIR, f"{name}.json")
+        if os.path.exists(root_path):
+            return root_path
+    return os.path.join(PROFILES_DIR, f"{name}.json")
+
+
+def get_active_profile():
+    """返回当前激活的游戏配置名，默认 'default'。"""
     try:
-        if os.path.exists(PROFILE_PATH):
-            with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+        if os.path.exists(ACTIVE_PROFILE_PATH):
+            with open(ACTIVE_PROFILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            name = data.get("profile")
+            if name and os.path.exists(_profile_path(name)):
+                return name
+    except (OSError, json.JSONDecodeError):
+        pass
+    return "default"
+
+
+def set_active_profile(name):
+    """激活指定游戏配置。返回是否成功。"""
+    if not name or not os.path.exists(_profile_path(name)):
+        return False
+    _save_json(ACTIVE_PROFILE_PATH, {"profile": name})
+    return True
+
+
+def active_profile_path():
+    return _profile_path(get_active_profile())
+
+
+def load_profile_named(name):
+    """加载指定游戏配置的映射。"""
+    path = _profile_path(name)
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
                 return {"mappings": {}}
@@ -59,12 +131,20 @@ def load_profile():
             data["mappings"] = mappings if isinstance(mappings, dict) else {}
             return data
     except (OSError, json.JSONDecodeError) as error:
-        print("[Config] Failed to load profile:", error)
+        print("[Config] Failed to load profile:", name, error)
     return {"mappings": {}}
 
 
-def save_profile(data):
-    _save_json(PROFILE_PATH, data)
+def save_profile_named(name, data):
+    """保存到指定游戏配置（本地调优保存到 profiles/local/）。"""
+    if not name:
+        name = "default"
+
+    local_dir = os.path.join(PROFILES_DIR, "local")
+    if name != "default" or os.path.exists(os.path.join(local_dir, f"{name}.json")):
+        _save_json(os.path.join(local_dir, f"{name}.json"), data)
+    else:
+        _save_json(os.path.join(PROFILES_DIR, f"{name}.json"), data)
 
 
 def _save_json(path, data):

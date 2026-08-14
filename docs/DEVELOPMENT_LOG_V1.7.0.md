@@ -31,6 +31,30 @@ boundaries and product documentation.
 - Moved ESP32 angle wrapping, clamping and XInput scaling into firmware
 - Updated public wording to use XInput-compatible terminology
 - Added product, installation and third-party documentation
+- Added HidHide game-exclusive mode (`tools/hidhide.py` + CLI + GUI dialog)
+  - Locates HidHideCLI and enumerates HID devices via Windows PnP
+  - Hides / unhides physical controllers and toggles cloaking (UAC elevated)
+  - Registers CapabilityNexus itself as an exempt app so it can keep reading a
+    hidden physical controller
+  - Verified with a Bluetooth Xbox One controller: after cloaking, XInput slot
+    reports only the virtual x360 gamepad; the real controller stays readable
+    by the engine once python.exe is exempted
+- Added per-game profiles (`profiles/<game>.json`, GUI: Mappings > Game Profiles)
+  - `config/active_profile.json` records the selected game
+  - Each profile carries its own mappings and an optional `processors` section
+  - Engine and request handler reload the active profile at runtime
+  - Local device-tuning profiles live in `profiles/local/` (gitignored) so a
+    hardware vendor's per-game tuning stays with the device and is not shared
+    to users with different hardware
+- Added `curve` processor (`processors/curve.py`) for gyro response curves
+  - Two modes: `linear` (segment interpolation) and `step` (fixed output per
+    angle band, recommended for combat games)
+  - Configurable deadzone, max angle and per-band percentages
+  - Used by the Cyberpunk 2077 profile: X axis ±12 deg to 80%, Y axis ±6 deg
+    to 60%, 1.5 deg deadzone, axes reversed via `gain: -1.0`
+- First in-game test with Cyberpunk 2077: HidHide hides the real Xbox One pad,
+  the virtual XInput-compatible controller is the only pad the game sees, and
+  the gyro steers the in-game camera (tuning still in progress)
 
 ## ESP32 Boundary
 
@@ -49,7 +73,6 @@ axis values. The open client forwards final control values.
 ## Remaining Work
 
 - Add official third-party installer assets and license bundles
-- Implement HidHide session-blacklist configuration
 - Add automated hardware-in-the-loop tests
 - Test multiple games and controller selection behavior
 

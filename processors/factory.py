@@ -55,6 +55,21 @@ class ProcessorFactory:
 
             )
 
+        elif t=="curve":
+
+            from processors.curve import CurveProcessor
+
+            return CurveProcessor(
+
+                config.get("max_degrees", 30),
+
+                config.get("deadzone", 2.5),
+
+                config.get("points"),
+
+                config.get("mode", "step")
+
+            )
 
         else:
 

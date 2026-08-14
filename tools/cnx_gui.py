@@ -114,6 +114,7 @@ class CapabilityNexusGUI:
 
         settings_menu = tk.Menu(menubar, tearoff=0)
         settings_menu.add_command(label=self.t("menu_preferences"), command=self.show_preferences)
+        settings_menu.add_command(label=self.t("menu_hidhide"), command=self.show_hidhide)
         settings_menu.add_separator()
         settings_menu.add_command(label=self.t("menu_start_engine"), command=self.start_engine)
         settings_menu.add_command(label=self.t("menu_stop_engine"), command=self.stop_engine)
@@ -129,6 +130,8 @@ class CapabilityNexusGUI:
         menubar.add_cascade(label=self.t("menu_devices"), menu=devices_menu)
 
         mappings_menu = tk.Menu(menubar, tearoff=0)
+        mappings_menu.add_command(label=self.t("menu_game_profiles"), command=self.show_game_profiles)
+        mappings_menu.add_separator()
         mappings_menu.add_command(label=self.t("menu_auto_route"), command=self.auto_route)
         mappings_menu.add_command(label=self.t("menu_remove_mapping"), command=self.remove_mapping)
         mappings_menu.add_separator()
@@ -2024,6 +2027,303 @@ class CapabilityNexusGUI:
 
     def show_preferences(self):
         messagebox.showinfo(self.t("prefs_title"), self.t("prefs_body"))
+
+    def show_hidhide(self):
+        """游戏独占模式对话框：管理 HidHide 隐藏物理设备。"""
+        from tools import hidhide
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t("menu_hidhide"))
+        dialog.geometry("720x520")
+
+        if not hidhide.is_installed():
+            ttk.Label(
+                dialog,
+                text=self.t("hidhide_not_installed"),
+                foreground="#c0392b",
+                wraplength=640,
+            ).pack(padx=16, pady=16)
+            ttk.Button(dialog, text=self.t("dlg_close"), command=dialog.destroy).pack()
+            return
+
+        admin = hidhide.is_admin()
+        self.log(f"HidHide dialog opened (admin={admin})")
+
+        # 状态区
+        status_box = ttk.LabelFrame(dialog, text=self.t("hidhide_status"))
+        status_box.pack(fill=tk.X, padx=10, pady=6)
+
+        self.hidhide_status_var = tk.StringVar()
+        ttk.Label(
+            status_box,
+            textvariable=self.hidhide_status_var,
+            wraplength=660,
+        ).pack(fill=tk.X, padx=8, pady=4)
+
+        # 说明
+        ttk.Label(
+            dialog,
+            text=self.t("hidhide_hint"),
+            foreground="#94a3b8",
+            wraplength=660,
+        ).pack(fill=tk.X, padx=12, pady=(4, 0))
+
+        # 设备列表
+        list_box = ttk.LabelFrame(dialog, text=self.t("hidhide_devices"))
+        list_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=6)
+
+        columns = ("status", "type", "path")
+        self.hidhide_tree = ttk.Treeview(list_box, columns=columns, show="tree headings")
+        self.hidhide_tree.heading("#0", text=self.t("hidhide_col_name"))
+        self.hidhide_tree.heading("status", text=self.t("hidhide_col_status"))
+        self.hidhide_tree.heading("type", text=self.t("hidhide_col_type"))
+        self.hidhide_tree.heading("path", text=self.t("hidhide_col_path"))
+        self.hidhide_tree.column("status", width=90, anchor=tk.CENTER)
+        self.hidhide_tree.column("type", width=90, anchor=tk.CENTER)
+        self.hidhide_tree.column("path", width=320)
+        self.hidhide_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+
+        # 按钮区
+        btn_box = ttk.Frame(dialog)
+        btn_box.pack(fill=tk.X, padx=10, pady=(0, 6))
+
+        ttk.Button(
+            btn_box,
+            text=self.t("hidhide_refresh"),
+            command=lambda: self._hidhide_refresh(dialog),
+        ).pack(side=tk.LEFT, padx=3)
+
+        ttk.Button(
+            btn_box,
+            text=self.t("hidhide_hide_selected"),
+            command=lambda: self._hidhide_toggle_selected(dialog, True),
+        ).pack(side=tk.LEFT, padx=3)
+
+        ttk.Button(
+            btn_box,
+            text=self.t("hidhide_unhide_selected"),
+            command=lambda: self._hidhide_toggle_selected(dialog, False),
+        ).pack(side=tk.LEFT, padx=3)
+
+        ttk.Button(
+            btn_box,
+            text=self.t("hidhide_hide_all"),
+            command=lambda: self._hidhide_hide_all(dialog),
+        ).pack(side=tk.LEFT, padx=3)
+
+        ttk.Button(
+            btn_box,
+            text=self.t("hidhide_self_visible"),
+            command=lambda: self._hidhide_self_visible(dialog),
+        ).pack(side=tk.LEFT, padx=3)
+
+        ttk.Button(
+            btn_box,
+            text=self.t("dlg_close"),
+            command=dialog.destroy,
+        ).pack(side=tk.RIGHT, padx=3)
+
+        self._hidhide_refresh(dialog)
+
+    def _hidhide_refresh(self, dialog):
+        from tools import hidhide
+
+        status_lines = [
+            f"{self.t('hidhide_admin')}: {'yes' if hidhide.is_admin() else 'no'}",
+            f"{self.t('hidhide_cloak')}: {hidhide.cloak_state() or 'unknown'}",
+            f"{self.t('hidhide_inverse')}: {hidhide.inverse_state() or 'unknown'}",
+        ]
+        apps = hidhide.list_apps()
+        status_lines.append(f"{self.t('hidhide_apps')}: {len(apps)}")
+        for app in apps:
+            status_lines.append(f"    {app}")
+
+        hidden = set(hidhide.list_hidden())
+        self.hidhide_status_var.set("\n".join(status_lines))
+
+        self.hidhide_tree.delete(*self.hidhide_tree.get_children())
+
+        devices = hidhide.list_hid_devices()
+        for device in devices:
+            instance_id = device["instance_id"]
+            is_hidden = instance_id in hidden
+            dev_type = "GAMING" if device["gaming"] else "HID"
+            status = self.t("hidhide_state_hidden") if is_hidden else self.t("hidhide_state_visible")
+            name = device["friendly_name"] or instance_id
+
+            self.hidhide_tree.insert(
+                "",
+                tk.END,
+                text=name,
+                values=(status, dev_type, instance_id),
+                tags=("hidden",) if is_hidden else ("visible",),
+                open=False,
+            )
+
+        self.hidhide_tree.tag_configure("hidden", foreground="#fbbf24")
+        self.hidhide_tree.tag_configure("visible", foreground="#cbd5e1")
+
+    def _hidhide_toggle_selected(self, dialog, do_hide):
+        from tools import hidhide
+
+        selection = self.hidhide_tree.selection()
+        if not selection:
+            self.log("Select a device first.")
+            return
+
+        for item in selection:
+            values = self.hidhide_tree.item(item, "values")
+            instance_id = values[2] if len(values) > 2 else None
+            if not instance_id:
+                continue
+
+            if do_hide:
+                ok, message = hidhide.hide(instance_id)
+            else:
+                ok, message = hidhide.unhide(instance_id)
+
+            if not ok:
+                messagebox.showwarning(
+                    self.t("menu_hidhide"),
+                    f"{self.t('hidhide_action_failed')}: {message}",
+                )
+                self.log(f"HidHide action failed: {message}")
+                return
+
+            name = self.hidhide_tree.item(item, "text")
+            self.log(f"{'Hidden' if do_hide else 'Unhidden'}: {name}")
+
+        self._hidhide_refresh(dialog)
+
+    def _hidhide_hide_all(self, dialog):
+        from tools import hidhide
+
+        ok, message, count = hidhide.hide_all_gaming_devices()
+        if ok:
+            self.log(f"HidHide hidden {count} gaming devices, cloaking enabled.")
+            messagebox.showinfo(
+                self.t("menu_hidhide"),
+                self.t("hidhide_all_done").format(count),
+            )
+        else:
+            messagebox.showwarning(
+                self.t("menu_hidhide"),
+                f"{self.t('hidhide_action_failed')}: {message}",
+            )
+            self.log(f"HidHide hide-all failed: {message}")
+
+        self._hidhide_refresh(dialog)
+
+    def _hidhide_self_visible(self, dialog):
+        from tools import hidhide
+
+        ok, message = hidhide.ensure_self_visible()
+        if ok:
+            self.log("CapabilityNexus registered as exempt app.")
+            messagebox.showinfo(self.t("menu_hidhide"), self.t("hidhide_self_done"))
+        else:
+            self.log(f"HidHide self-visible failed: {message}")
+
+        self._hidhide_refresh(dialog)
+
+    def show_game_profiles(self):
+        """游戏配置管理：切换不同游戏的独立映射配置。"""
+        from tools import config_io
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t("menu_game_profiles"))
+        dialog.geometry("460x360")
+
+        ttk.Label(
+            dialog,
+            text=self.t("game_profiles_hint"),
+            wraplength=420,
+            foreground="#94a3b8",
+        ).pack(fill=tk.X, padx=12, pady=(10, 6))
+
+        profiles = config_io.list_profiles()
+        active = config_io.get_active_profile()
+
+        list_frame = ttk.Frame(dialog)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        profile_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set)
+        profile_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=profile_list.yview)
+
+        for name in profiles:
+            marker = " *" if name == active else ""
+            profile_list.insert(tk.END, f"{name}{marker}")
+
+        def select_active():
+            index = profile_list.curselection()
+            if not index:
+                return
+            name = profiles[index[0]]
+            if name == active:
+                return
+            if not config_io.set_active_profile(name):
+                return
+            self.log(f"Active game profile: {name}")
+            profile_list.delete(0, tk.END)
+            for n in config_io.list_profiles():
+                marker = " *" if n == name else ""
+                profile_list.insert(tk.END, f"{n}{marker}")
+            self._reload_profile_config()
+
+        def new_profile():
+            dialog2 = tk.Toplevel(dialog)
+            dialog2.title(self.t("game_profiles_new"))
+            dialog2.geometry("360x120")
+            ttk.Label(dialog2, text=self.t("game_profiles_name")).pack(padx=8, pady=(10, 2))
+            var = tk.StringVar()
+            entry = ttk.Entry(dialog2, textvariable=var)
+            entry.pack(fill=tk.X, padx=8)
+            entry.focus_set()
+
+            def do_create():
+                name = var.get().strip().lower().replace(" ", "_")
+                if not name:
+                    return
+                path = os.path.join(config_io.PROFILES_DIR, f"{name}.json")
+                if os.path.exists(path):
+                    return
+                import json
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump({"mappings": {}}, f, ensure_ascii=False, indent=4)
+                config_io.set_active_profile(name)
+                self.log(f"Created game profile: {name}")
+                dialog2.destroy()
+                dialog.destroy()
+                self.show_game_profiles()
+
+            ttk.Button(dialog2, text=self.t("dlg_save"), command=do_create).pack(padx=8, pady=8)
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
+        ttk.Button(btn_frame, text=self.t("game_profiles_activate"), command=select_active).pack(side=tk.LEFT, padx=3)
+        ttk.Button(btn_frame, text=self.t("game_profiles_new"), command=new_profile).pack(side=tk.LEFT, padx=3)
+        ttk.Button(btn_frame, text=self.t("dlg_close"), command=dialog.destroy).pack(side=tk.RIGHT, padx=3)
+
+    def _reload_profile_config(self):
+        """切换游戏配置后重载引擎映射。"""
+        if self.app is None or not hasattr(self.app, "mapping_engine"):
+            self.refresh_devices()
+            return
+
+        from tools import config_io
+
+        profile = config_io.load_profile()
+        self.app.mapping_engine.load_mappings(profile.get("mappings", {}))
+        if hasattr(self.app, "reload_processors"):
+            self.app.reload_processors()
+        if hasattr(self.app, "request_handler"):
+            self.app.request_handler.set_mappings(profile.get("mappings", {}))
+        self.refresh_devices()
+        self.log(self.t("game_profiles_loaded").format(config_io.get_active_profile()))
 
     def show_about(self):
         messagebox.showinfo(self.t("about_title"), self.t("about_body"))

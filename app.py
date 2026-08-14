@@ -47,11 +47,12 @@ class CapabilityNexusApp:
         # 数据适配
         self.adapter = StreamAdapter(self.registry)
 
-        # 处理器
+        # 处理器（全局 + 游戏专属覆盖）
         self.processor_manager = ProcessorManager()
         self.processor_manager.load(
             os.path.join(self.project_root, "config", "processors.json")
         )
+        self._load_game_processors()
 
         # UMI 解析器（控制台测试用）
         self.umi_parser = UMIParser(self.event_bus)
@@ -106,9 +107,36 @@ class CapabilityNexusApp:
 
         # Mapping
         self.mapping_engine = MappingEngine(self.event_bus)
-        self.mapping_engine.load_profile(
-            os.path.join(self.project_root, "profiles", "default.json")
+        self.mapping_engine.load_profile(self._active_profile_path())
+
+    def _active_profile_path(self):
+        from tools.config_io import active_profile_path
+
+        return active_profile_path()
+
+    def _load_game_processors(self):
+        """加载当前激活游戏配置中的处理器覆盖。"""
+        import json
+
+        path = self._active_profile_path()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as error:
+            print("[App] Failed to read game profile processors:", error)
+            return
+
+        processors = data.get("processors")
+        if processors:
+            self.processor_manager.load_dict(processors)
+
+    def reload_processors(self):
+        """运行时重载处理器（全局 + 当前游戏配置）。"""
+        self.processor_manager.processors.clear()
+        self.processor_manager.load(
+            os.path.join(self.project_root, "config", "processors.json")
         )
+        self._load_game_processors()
 
     def _build_outputs(self):
         # 输出设备（用户启用）
@@ -125,7 +153,7 @@ class CapabilityNexusApp:
         # 需求处理（游戏请求 -> 映射或提示）
         import json as _json
 
-        profile_path = os.path.join(self.project_root, "profiles", "default.json")
+        profile_path = self._active_profile_path()
         with open(profile_path, "r", encoding="utf-8") as _f:
             _profile_data = _json.load(_f)
 

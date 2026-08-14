@@ -278,10 +278,14 @@ Normalizer - 范围转换
 Deadzone   - 死区处理
 Sensitivity - 灵敏度
 Clamp      - 限制范围
+Curve      - 角度响应曲线（陀螺仪：角度→摇杆百分比，含死区；
+             linear 平滑 / step 阶梯区间两种模式）
 
 配置：
 
-config/processors.json
+config/processors.json（全局）
+profiles/<game>.json → processors（游戏专属覆盖）
+profiles/local/<game>.json（本地设备调优，gitignored，不随仓库上传）
 12. Mapping Engine
 
 mapping/
@@ -440,6 +444,7 @@ create-package
 auto-route
 map-capability / remove-mapping / list-mappings
 list-library / library-search / install-device
+hidhide（status/devices/hidden/hide-all/hide/unhide/cloak-on/cloak-off/self-visible/apps）
 16.2 GUI
 
 tools/cnx_gui.py（tkinter）
@@ -450,7 +455,27 @@ tools/cnx_gui.py（tkinter）
 双击输出功能 → 反向映射
 映射列显示（输入→目标，输出←驱动）
 中英文切换（tools/i18n.py）
-16.3 共享数据层
+游戏独占模式（系统 > 游戏独占模式 HidHide）：
+  枚举 HID 设备、隐藏/显示物理手柄、一键隐藏全部游戏设备、
+  保持本程序可见（豁免 python.exe）、启停 cloaking
+
+16.3 HidHide 管理
+
+tools/hidhide.py
+
+封装 HidHideCLI.exe（Nefarius HidHide）：
+- 定位 CLI / 检查权限
+- 读取与切换 cloaking / inverse 状态
+- 通过 Windows PnP 枚举 HIDClass / XUSBClass 设备
+- 隐藏 / 取消隐藏（UAC 提权执行）
+- 应用豁免列表（app-reg / app-unreg）
+- 便捷流程：隐藏全部游戏设备、注册自身可见
+
+用途：
+游戏独占模式下，物理手柄对普通应用（游戏）隐藏，
+CapabilityNexus 通过注册 python.exe 为豁免应用继续读取物理手柄。
+
+16.4 共享数据层
 
 tools/config_io.py（CLI 和 GUI 共用）
 17. 蓝牙扫描
@@ -481,6 +506,7 @@ V1.5.0 已完成：
 ✅ 请求处理（未满足需求提示）
 ✅ CLI 工具
 ✅ GUI（对称布局/双向映射/映射列/中英文）
+✅ 游戏独占模式（HidHide：隐藏物理手柄 / 豁免本程序 / cloaking）
 ✅ 应用装配（app.py）
 
 硬件

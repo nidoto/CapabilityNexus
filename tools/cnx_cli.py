@@ -696,6 +696,144 @@ def cmd_auto_route():
         print("  Route them manually if needed.")
 
 
+#
+# HidHide 游戏独占模式
+#
+
+HIDHIDE_COMMANDS = {
+    "status": "show current HidHide state",
+    "devices": "list HID devices (gaming ones marked)",
+    "hidden": "list currently hidden devices",
+    "hide-all": "hide all gaming devices and enable cloaking",
+    "hide": "hide one device by instance path",
+    "unhide": "unhide one device by instance path",
+    "cloak-on": "enable device hiding",
+    "cloak-off": "disable device hiding",
+    "self-visible": "add this python process to the exempt apps",
+    "apps": "list exempt applications",
+}
+
+
+def _make_hidhide():
+    from tools.hidhide import (
+        find_cli,
+        is_admin,
+        status_text,
+        list_hid_devices,
+        list_gaming_devices,
+        list_hidden,
+        list_apps,
+        hide,
+        unhide,
+        set_cloak,
+        ensure_self_visible,
+        hide_all_gaming_devices,
+    )
+
+    return {
+        "find_cli": find_cli,
+        "is_admin": is_admin,
+        "status_text": status_text,
+        "list_hid_devices": list_hid_devices,
+        "list_gaming_devices": list_gaming_devices,
+        "list_hidden": list_hidden,
+        "list_apps": list_apps,
+        "hide": hide,
+        "unhide": unhide,
+        "set_cloak": set_cloak,
+        "ensure_self_visible": ensure_self_visible,
+        "hide_all_gaming_devices": hide_all_gaming_devices,
+    }
+
+
+def _require_hidhide():
+    hh = _make_hidhide()
+    if not hh["find_cli"]():
+        print("[X] HidHide not installed.")
+        print("    Install it from https://github.com/nefarius/HidHide and reboot.")
+        return None
+    return hh
+
+
+def cmd_hidhide_help():
+    print("=== HidHide Game-Exclusive Mode ===")
+    print()
+    print("Usage: python tools/cnx_cli.py hidhide <command>")
+    print()
+    for name, desc in HIDHIDE_COMMANDS.items():
+        print(f"  {name:12s}  {desc}")
+    print()
+    print("Hide one device:  python tools/cnx_cli.py hidhide hide <instance path>")
+    print("Example:")
+    print('  python tools/cnx_cli.py hidhide devices')
+    print('  python tools/cnx_cli.py hidhide hide-all')
+    print('  python tools/cnx_cli.py hidhide cloak-off')
+
+
+def cmd_hidhide():
+    args = sys.argv[2:]
+
+    if not args or args[0] in ("-h", "--help", "help"):
+        cmd_hidhide_help()
+        return
+
+    hh = _require_hidhide()
+    if hh is None:
+        return
+
+    command = args[0]
+
+    if command == "status":
+        print(hh["status_text"]())
+    elif command == "devices":
+        print("=== HID Devices ===")
+        for device in hh["list_hid_devices"]():
+            tag = "GAMING" if device["gaming"] else "hid   "
+            name = device["friendly_name"] or device["instance_id"]
+            print(f"  [{tag}] {name}")
+            print(f"         {device['instance_id']}")
+    elif command == "hidden":
+        hidden = hh["list_hidden"]()
+        if not hidden:
+            print("No devices are currently hidden.")
+            return
+        print("=== Hidden Devices ===")
+        for path in hidden:
+            print(f"  {path}")
+    elif command == "apps":
+        apps = hh["list_apps"]()
+        if not apps:
+            print("No exempt applications.")
+            return
+        print("=== Exempt Applications ===")
+        for app in apps:
+            print(f"  {app}")
+    elif command == "hide-all":
+        ok, message, count = hh["hide_all_gaming_devices"]()
+        if ok:
+            print(f"[OK] Hidden {count} gaming device(s), cloaking enabled.")
+            print("    CapabilityNexus stays visible to the hidden devices.")
+            print("    Restart the engine so it can read the physical controller.")
+        else:
+            print(f"[X] {message}")
+    elif command in ("hide", "unhide") and len(args) >= 2:
+        fn = hh["hide"] if command == "hide" else hh["unhide"]
+        ok, message = fn(args[1])
+        print("[OK]" if ok else f"[X] {message}")
+    elif command == "cloak-on":
+        ok, message = hh["set_cloak"](True)
+        print("[OK] Cloaking enabled." if ok else f"[X] {message}")
+    elif command == "cloak-off":
+        ok, message = hh["set_cloak"](False)
+        print("[OK] Cloaking disabled." if ok else f"[X] {message}")
+    elif command == "self-visible":
+        ok, message = hh["ensure_self_visible"]()
+        print("[OK]" if ok else f"[X] {message}")
+    else:
+        print("Unknown hidhide command:", command)
+        cmd_hidhide_help()
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage:")
@@ -710,6 +848,7 @@ def main():
         print("  python tools/cnx_cli.py install-device <id>   Install a device from the library")
         print("  python tools/cnx_cli.py list-available   List configured devices")
         print("  python tools/cnx_cli.py remove-device    Remove a configured device")
+        print("  python tools/cnx_cli.py hidhide          HidHide game-exclusive mode (admin)")
         return
 
     cmd = sys.argv[1]
@@ -736,6 +875,8 @@ def main():
         cmd_list_available()
     elif cmd == "remove-device":
         cmd_remove_device()
+    elif cmd == "hidhide":
+        cmd_hidhide()
     else:
         print("Unknown command:", cmd)
 
