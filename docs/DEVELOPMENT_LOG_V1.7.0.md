@@ -93,6 +93,15 @@ boundaries and product documentation.
   - Verified with the bundled 1.21.442.0 driver: nefconw uninstall and install
     both report success, and the virtual XInput-compatible controller returns
     to XInput slot 0 after reinstall
+- Automated test suite (pytest)
+  - 45 tests covering EventBus (subscribe/publish/unsubscribe/isolation),
+    CapabilityRegistry (wildcard), SerialParser (aliases/FRAME gating),
+    CurveProcessor (step/linear/deadzone/saturation), Transport
+    (stream/state/edge), config_io (multi-game profiles, local dir priority)
+    and the end-to-end pipeline (StreamData -> Channel -> processor ->
+    mapping -> OutputEvent)
+  - Run with `py -3 -m pytest`; pytest is a dev dependency in requirements.txt
+  - Tests excluded from the release build
 
 ## ESP32 Boundary
 
@@ -103,6 +112,7 @@ axis values. The open client forwards final control values.
 ## Verification
 
 - Python `compileall` passes
+- `py -3 -m pytest`: 45 tests pass
 - Serial alias and frame parsing tests pass
 - Mapping reload and event lifecycle tests pass
 - Configuration atomic-save and shape-validation tests pass
@@ -110,7 +120,7 @@ axis values. The open client forwards final control values.
 
 ## Remaining Work
 
-- Add automated hardware-in-the-loop tests
+- Add hardware-in-the-loop tests (requires ESP32 + controller on the bench)
 - Test multiple games and controller selection behavior
 - Consider code signing for the frozen executable
 - Create a setup wizard / bundler that installs Python, drivers and the app

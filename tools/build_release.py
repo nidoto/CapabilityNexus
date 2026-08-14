@@ -53,6 +53,8 @@ EXCLUDE_NAMES = {
     "__pycache__",
     ".git",
     "local",  # profiles/local - 个人设备调优
+    "tests",  # 测试不进发布包
+    ".pytest_cache",
 }
 
 EXCLUDE_FILE_PATTERNS = (
