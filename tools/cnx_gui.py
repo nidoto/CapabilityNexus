@@ -2281,6 +2281,27 @@ class CapabilityNexusGUI:
     def show_preferences(self):
         messagebox.showinfo(self.t("prefs_title"), self.t("prefs_body"))
 
+    def show_services(self):
+        """服务管理对话框：Web 手机服务 + 驱动统一管理。"""
+        from tools import services
+        from tools import drivers
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t("services_panel"))
+        dialog.geometry("520x360")
+
+        ttk.Label(
+            dialog,
+            text=self.t("services_hint"),
+            wraplength=480,
+            foreground="#94a3b8",
+        ).pack(fill=tk.X, padx=12, pady=(10, 6))
+
+        # 复用底部面板的构建逻辑（在对话框中渲染）
+        self._build_services_panel(dialog)
+
+        ttk.Button(dialog, text=self.t("dlg_close"), command=dialog.destroy).pack(pady=(0, 10))
+
     def show_drivers(self):
         """驱动管理对话框：检测/安装/卸载 ViGEmBus 与 HidHide。"""
         from tools import drivers
