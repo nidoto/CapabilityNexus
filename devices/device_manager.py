@@ -24,6 +24,7 @@ class DeviceManager:
         self._connected = []
         self._connected_entries = []
         self._detected_xinput_indices = []
+        self._library_refresh_started = False
 
     def load_config(self):
         if not os.path.exists(self.config_path):
@@ -53,7 +54,12 @@ class DeviceManager:
 
     def discover(self):
         self.load_config()
-        self.library.refresh()
+
+        # 设备库网络刷新放后台，避免阻塞引擎启动（网络不通时可能超时）
+        if hasattr(self, "_library_refresh_started") and not self._library_refresh_started:
+            self._library_refresh_started = True
+            import threading
+            threading.Thread(target=self.library.refresh, daemon=True).start()
 
         detected = self.detector.detect()
         self._detected_xinput_indices = [

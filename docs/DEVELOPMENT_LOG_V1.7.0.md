@@ -161,6 +161,14 @@ boundaries and product documentation.
     gesture permission + gamma sign correction) or `phone-android.html`
     (HTTP LAN works directly)
   - Roadmap: Bluetooth transport, then a native Android app
+- Engine startup speedup
+  - Device library GitHub refresh moved to a background thread in
+    DeviceManager.discover(); network-unreachable timeouts no longer block
+    engine start or the WebSocket phone server
+  - Engine construction dropped from ~20s to ~0.3s; the phone page is served
+    ~0.5s after engine start
+  - WebSocketServerConnection.open() now waits for the async server to be
+    actually listening before returning
 
 ## ESP32 Boundary
 

@@ -53,10 +53,18 @@ class WebSocketServerConnection(LineConnection):
         self.port = port
         self.server = None
         self.thread = None
+        self._ready = None
 
     def open(self):
+        import threading as _t
+
+        self._ready = _t.Event()
         self.thread = threading.Thread(target=self._run_server, daemon=True)
         self.thread.start()
+        # 等待服务器真正开始监听（避免 open 返回但端口未就绪）
+        self._ready.wait(timeout=5)
+        if not self._ready.is_set():
+            print(f"[WebSocketServer] Warning: server may not be ready on {self.host}:{self.port}")
         print(f"[WebSocketServer] Listening on ws://{self.host}:{self.port}")
         print(f"[WebSocketServer] Phone page: http://<PC-IP>:{self.port}/")
 
@@ -122,6 +130,7 @@ class WebSocketServerConnection(LineConnection):
             max_size=64 * 1024,
             process_request=self._process_request,
         )
+        self._ready.set()
         try:
             await self.server.wait_closed()
         except asyncio.CancelledError:
