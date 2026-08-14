@@ -128,10 +128,11 @@ class CapabilityNexusGUI:
 
         btns = ttk.Frame(box)
         btns.pack(fill=tk.X, padx=6, pady=4)
+        ttk.Button(btns, text=self.t("btn_add_device"), command=self.add_device_dialog).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns, text=self.t("btn_remove_device"), command=self.remove_selected_device).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btns, text=self.t("btn_auto_route"), command=self.auto_route).pack(side=tk.LEFT, padx=2)
 
         self.tree_menu = tk.Menu(self.root, tearoff=0)
+        self.tree_menu.add_command(label=self.t("btn_add_device"), command=self.add_device_dialog)
         self.tree_menu.add_command(label=self.t("btn_remove_device"), command=self.remove_selected_device)
         self.tree_menu.add_command(label=self.t("btn_auto_route"), command=self.auto_route)
         self.tree_menu.add_separator()

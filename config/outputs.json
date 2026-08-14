@@ -1,1 +1,9 @@
-{"outputs": [{"id": "virtual_x360", "type": "xinput", "name": "XInput-compatible Controller"}, {"id": "virtual_xinput", "type": "xinput", "name": "XInput-compatible Controller"}]}
+{
+    "outputs": [
+        {
+            "id": "virtual_xinput",
+            "type": "xinput",
+            "name": "XInput-compatible Controller"
+        }
+    ]
+}
