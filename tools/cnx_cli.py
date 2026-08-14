@@ -281,24 +281,24 @@ def cmd_create_package():
 
 
 VIRTUAL_TARGETS = {
-    "left_x": "Virtual X360 - Left stick X",
-    "left_y": "Virtual X360 - Left stick Y",
-    "right_x": "Virtual X360 - Right stick X",
-    "right_y": "Virtual X360 - Right stick Y",
-    "left_trigger": "Virtual X360 - Left trigger",
-    "right_trigger": "Virtual X360 - Right trigger",
-    "button_a": "Virtual X360 - Button A",
-    "button_b": "Virtual X360 - Button B",
-    "button_x": "Virtual X360 - Button X",
-    "button_y": "Virtual X360 - Button Y",
-    "button_lb": "Virtual X360 - LB",
-    "button_rb": "Virtual X360 - RB",
-    "button_start": "Virtual X360 - Start",
-    "button_back": "Virtual X360 - Back",
-    "button_dpad_up": "Virtual X360 - D-pad Up",
-    "button_dpad_down": "Virtual X360 - D-pad Down",
-    "button_dpad_left": "Virtual X360 - D-pad Left",
-    "button_dpad_right": "Virtual X360 - D-pad Right",
+    "left_x": "XInput-compatible - Left stick X",
+    "left_y": "XInput-compatible - Left stick Y",
+    "right_x": "XInput-compatible - Right stick X",
+    "right_y": "XInput-compatible - Right stick Y",
+    "left_trigger": "XInput-compatible - Left trigger",
+    "right_trigger": "XInput-compatible - Right trigger",
+    "button_a": "XInput-compatible - Button A",
+    "button_b": "XInput-compatible - Button B",
+    "button_x": "XInput-compatible - Button X",
+    "button_y": "XInput-compatible - Button Y",
+    "button_lb": "XInput-compatible - LB",
+    "button_rb": "XInput-compatible - RB",
+    "button_start": "XInput-compatible - Start",
+    "button_back": "XInput-compatible - Back",
+    "button_dpad_up": "XInput-compatible - D-pad Up",
+    "button_dpad_down": "XInput-compatible - D-pad Down",
+    "button_dpad_left": "XInput-compatible - D-pad Left",
+    "button_dpad_right": "XInput-compatible - D-pad Right",
 }
 
 REAL_TARGETS = {
@@ -362,7 +362,7 @@ def cmd_map_capability():
 
     print()
     print("Available output targets:")
-    print("  -- Virtual X360 --")
+    print("  -- XInput-compatible --")
     for t, desc in VIRTUAL_TARGETS.items():
         print(f"  {t}  ({desc})")
     print("  -- Real devices --")
@@ -646,7 +646,7 @@ def cmd_remove_device():
 
 
 def cmd_auto_route():
-    print("=== Auto-Route Device to Virtual X360 ===")
+    print("=== Auto-Route Device to XInput-compatible Controller ===")
     print()
 
     from mapping.auto_route import AutoRouter
@@ -702,7 +702,7 @@ def cmd_auto_route():
     save_profile(profile)
 
     print()
-    print(f"[OK] Routed {len(mappings)} capabilities to Virtual X360:")
+    print(f"[OK] Routed {len(mappings)} capabilities to XInput-compatible:")
     for src, m in mappings.items():
         print(f"  {src} -> {m['target']}")
 
@@ -716,7 +716,7 @@ def cmd_auto_route():
 
     if missing:
         print()
-        print("[i] Unroutable capabilities (no matching X360 output):")
+        print("[i] Unroutable capabilities (no matching XInput-compatible output):")
         for m in missing:
             print(f"  {m}")
         print("  Route them manually if needed.")
@@ -727,7 +727,7 @@ def main():
         print("Usage:")
         print("  python tools/cnx_cli.py add-device       Add a custom device")
         print("  python tools/cnx_cli.py create-package   Create a capability package")
-        print("  python tools/cnx_cli.py auto-route       One-click route device to Virtual X360")
+        print("  python tools/cnx_cli.py auto-route       One-click route device to XInput-compatible controller")
         print("  python tools/cnx_cli.py map-capability   Map a capability to an output target")
         print("  python tools/cnx_cli.py remove-mapping   Remove a mapping")
         print("  python tools/cnx_cli.py list-mappings    Show current mappings + unmapped")

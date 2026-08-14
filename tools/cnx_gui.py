@@ -478,7 +478,7 @@ class CapabilityNexusGUI:
         conn_options = [
             ("serial", "USB / Serial"),
             ("hid", "USB HID (gamepad/wheel)"),
-            ("xinput", "XInput (Xbox)"),
+            ("xinput", "XInput compatible (gamepad)"),
             ("tcp", "Network / WiFi (TCP)"),
             ("udp", "Network / WiFi (UDP)"),
             ("bluetooth", "Bluetooth (RFCOMM)"),

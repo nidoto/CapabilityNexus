@@ -335,7 +335,7 @@ output/
 
 output/virtual_xinput.py
 
-虚拟 Xbox 360 手柄（ViGEmBus / vgamepad）。
+XInput 兼容虚拟手柄（ViGEmBus / vgamepad）。
 
 支持摇杆/扳机/按钮，注册游戏震动请求捕获。
 12.2 VirtualKeyboard
@@ -356,7 +356,7 @@ pynput 模拟鼠标。
 
 output/real_xinput.py
 
-驱动真实 Xbox One 手柄震动马达（XInputSetState）。
+驱动真实 XInput 兼容手柄震动马达（XInputSetState）。
 12.5 OutputRouter
 
 output/router.py
@@ -365,8 +365,9 @@ output/router.py
 
 key_*   → 虚拟键盘
 mouse_* → 虚拟鼠标
-xbox.*  → 真实 Xbox One
-其他    → 虚拟 x360
+ds4.*   → DualShock 兼容手柄
+xbox.*  → 真实 XInput 手柄
+其他    → XInput 兼容虚拟手柄
 12.6 RequestHandler
 
 output/request_handler.py
@@ -452,7 +453,31 @@ V1.3.0 已完成：
 ✅ 虚拟 Xbox 360 手柄（Windows 识别）
 ✅ 真实手柄震动马达
 ✅ 蓝牙设备扫描
-18. 设计原则
+18. 命名规范与合规说明
+
+CapabilityNexus 是开源的现实输入抽象框架。
+
+它模拟的是协议兼容的虚拟输入设备，不冒充任何品牌产品。
+
+规范：
+
+- 面向用户的界面 / 文档使用协议描述：
+  XInput 兼容虚拟手柄
+  DualShock 协议兼容虚拟手柄
+- 内部技术标识符（xbox.* / ds4.* 能力名、类名）
+  是协议层命名，指 XInput / DualShock 协议，
+  与 ViGEmBus / vgamepad 等开源库的做法一致
+- 不出现品牌 logo / 官方命名宣传
+- 不冒充正品设备
+
+原则：
+
+协议兼容 ≠ 品牌假冒。
+
+CapabilityNexus 的定位是把任意现实设备能力
+映射到任意协议兼容的虚拟输出，
+x360 / DS4 只是可选的协议后端之一。
+19. 设计原则
 
 1. 核心框架稳定优先。
 2. 设备通过 Capability 接入。
@@ -464,7 +489,7 @@ V1.3.0 已完成：
 8. 游戏请求未满足时提醒用户。
 9. 中间层只转发值，不做设备语义猜测。
 10. 连接方式可插拔，主流内建 + 用户自定义。
-19. 下一阶段
+20. 下一阶段
 
 V1.5.0：
 

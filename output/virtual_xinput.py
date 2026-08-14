@@ -122,7 +122,7 @@ class VirtualXInput(OutputDevice):
             self._real = True
 
             print(
-                "[XInput] Virtual Xbox 360 Gamepad Created"
+                "[XInput] Virtual XInput-compatible Gamepad Created"
             )
 
             self._register_request_notification()

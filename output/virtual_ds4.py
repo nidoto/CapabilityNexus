@@ -68,7 +68,7 @@ class VirtualDS4(OutputDevice):
             self._vgamepad = vgamepad
             self._gamepad = vgamepad.VDS4Gamepad()
             self._real = True
-            print("[DS4] Virtual PS4 Gamepad Created")
+            print("[DS4] Virtual DualShock-compatible Gamepad Created")
         except Exception as e:
             print("[DS4] Real gamepad unavailable, using simulation:", e)
 

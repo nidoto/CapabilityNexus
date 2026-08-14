@@ -10,8 +10,8 @@ class OutputDeviceInfo:
 OUTPUT_DEVICES = [
     OutputDeviceInfo(
         "virtual_x360",
-        "Virtual X360 Controller",
-        "Xbox 360 controller emulated via ViGEmBus",
+        "XInput-compatible Virtual Controller",
+        "Standard game controller protocol (XInput compatible)",
         {
             "left_x": "Left Stick X",
             "left_y": "Left Stick Y",
@@ -81,8 +81,8 @@ OUTPUT_DEVICES = [
     ),
     OutputDeviceInfo(
         "virtual_ds4",
-        "Virtual PS4 (DualShock 4)",
-        "PS4 controller emulated via ViGEmBus",
+        "DualShock Protocol Virtual Controller",
+        "Standard game controller protocol (DualShock 4 compatible)",
         {
             "ds4.left_x": "Left Stick X",
             "ds4.left_y": "Left Stick Y",
