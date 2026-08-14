@@ -114,6 +114,7 @@ class CapabilityNexusGUI:
 
         settings_menu = tk.Menu(menubar, tearoff=0)
         settings_menu.add_command(label=self.t("menu_preferences"), command=self.show_preferences)
+        settings_menu.add_command(label=self.t("menu_drivers"), command=self.show_drivers)
         settings_menu.add_command(label=self.t("menu_hidhide"), command=self.show_hidhide)
         settings_menu.add_separator()
         settings_menu.add_command(label=self.t("menu_start_engine"), command=self.start_engine)
@@ -2027,6 +2028,120 @@ class CapabilityNexusGUI:
 
     def show_preferences(self):
         messagebox.showinfo(self.t("prefs_title"), self.t("prefs_body"))
+
+    def show_drivers(self):
+        """驱动管理对话框：检测/安装/卸载 ViGEmBus 与 HidHide。"""
+        from tools import drivers
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t("menu_drivers"))
+        dialog.geometry("620x360")
+
+        ttk.Label(
+            dialog,
+            text=self.t("drivers_hint"),
+            wraplength=580,
+            foreground="#94a3b8",
+        ).pack(fill=tk.X, padx=12, pady=(10, 6))
+
+        status_frame = ttk.LabelFrame(dialog, text=self.t("drivers_status"))
+        status_frame.pack(fill=tk.X, padx=10, pady=6)
+
+        self.drivers_status_var = tk.StringVar()
+        ttk.Label(
+            status_frame,
+            textvariable=self.drivers_status_var,
+            wraplength=580,
+        ).pack(fill=tk.X, padx=8, pady=6)
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, padx=10, pady=(0, 6))
+
+        def refresh():
+            vigembus, hidhide = drivers.driver_status()
+            drivers_dir = drivers._find_bundled_drivers_dir()
+
+            lines = []
+            vg_state = self.t("drivers_installed") if vigembus else self.t("drivers_missing")
+            hh_state = self.t("drivers_installed") if hidhide else self.t("drivers_missing")
+            lines.append(f"{self.t('drivers_vigembus')}: {vg_state}")
+            lines.append(f"{self.t('drivers_hidhide')}: {hh_state}")
+
+            if drivers_dir:
+                lines.append(f"{self.t('drivers_source')}: {drivers_dir}")
+            else:
+                lines.append(self.t("drivers_no_source"))
+
+            self.drivers_status_var.set("\n".join(lines))
+            return vigembus, hidhide, drivers_dir
+
+        def do_install_vigembus():
+            vigembus, _hh, drivers_dir = refresh()
+            if vigembus:
+                return
+            ok, message = drivers.install_vigembus(drivers_dir)
+            if ok:
+                self.log("ViGEmBus installed.")
+                messagebox.showinfo(self.t("menu_drivers"), self.t("drivers_vg_installed_ok"))
+            else:
+                messagebox.showwarning(self.t("menu_drivers"), message)
+            refresh()
+
+        def do_uninstall_vigembus():
+            vigembus, _hh, drivers_dir = refresh()
+            if not vigembus:
+                return
+            if not messagebox.askyesno(self.t("menu_drivers"), self.t("drivers_vg_uninstall_ask")):
+                return
+            ok, message = drivers.uninstall_vigembus(drivers_dir)
+            if ok:
+                self.log("ViGEmBus uninstalled.")
+                refresh()
+            else:
+                messagebox.showwarning(self.t("menu_drivers"), message)
+                refresh()
+
+        def do_install_hidhide():
+            _vg, hidhide, drivers_dir = refresh()
+            if hidhide:
+                return
+            ok, message = drivers.install_hidhide(drivers_dir)
+            if ok:
+                self.log("HidHide installer launched.")
+            else:
+                messagebox.showwarning(self.t("menu_drivers"), message)
+            refresh()
+
+        def do_uninstall_hidhide():
+            _vg, hidhide, _dd = refresh()
+            if not hidhide:
+                return
+            if not messagebox.askyesno(self.t("menu_drivers"), self.t("drivers_hh_uninstall_ask")):
+                return
+            ok, message = drivers.uninstall_hidhide()
+            if ok:
+                self.log("HidHide uninstalled.")
+            else:
+                messagebox.showwarning(self.t("menu_drivers"), message)
+            refresh()
+
+        ttk.Button(btn_frame, text=self.t("drivers_refresh"), command=refresh).pack(side=tk.LEFT, padx=3)
+
+        ttk.Label(btn_frame, text=self.t("drivers_vigembus"), font=("Segoe UI", 10, "bold")).pack(
+            side=tk.LEFT, padx=(14, 2), pady=6
+        )
+        ttk.Button(btn_frame, text=self.t("drivers_install"), command=do_install_vigembus).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text=self.t("drivers_uninstall"), command=do_uninstall_vigembus).pack(side=tk.LEFT, padx=2)
+
+        ttk.Label(btn_frame, text=self.t("drivers_hidhide"), font=("Segoe UI", 10, "bold")).pack(
+            side=tk.LEFT, padx=(14, 2), pady=6
+        )
+        ttk.Button(btn_frame, text=self.t("drivers_install"), command=do_install_hidhide).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text=self.t("drivers_uninstall"), command=do_uninstall_hidhide).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(btn_frame, text=self.t("dlg_close"), command=dialog.destroy).pack(side=tk.RIGHT, padx=3)
+
+        refresh()
 
     def show_hidhide(self):
         """游戏独占模式对话框：管理 HidHide 隐藏物理设备。"""

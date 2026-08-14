@@ -84,6 +84,15 @@ boundaries and product documentation.
 - End-to-end verified: the frozen exe starts and stays running; the release
   source distribution boots the engine, creates the virtual XInput-compatible
   controller on XInput slot 0 and shuts down cleanly
+- In-app driver management (System > Driver Management)
+  - `tools/drivers.py` detects, installs and uninstalls ViGEmBus and HidHide;
+    elevated operations run through UAC via ShellExecute "runas" with
+    synchronous completion and captured exit codes
+  - GUI dialog shows install state, resolves the bundled drivers/ directory
+    (exe or source dist), and offers install/uninstall buttons per driver
+  - Verified with the bundled 1.21.442.0 driver: nefconw uninstall and install
+    both report success, and the virtual XInput-compatible controller returns
+    to XInput slot 0 after reinstall
 
 ## ESP32 Boundary
 

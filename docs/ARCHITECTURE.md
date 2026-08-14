@@ -475,7 +475,18 @@ tools/hidhide.py
 游戏独占模式下，物理手柄对普通应用（游戏）隐藏，
 CapabilityNexus 通过注册 python.exe 为豁免应用继续读取物理手柄。
 
-16.4 共享数据层
+16.4 驱动管理
+
+tools/drivers.py
+
+检测 / 安装 / 卸载 Windows 驱动：
+- ViGEmBus（XInput 兼容输出）
+- HidHide（游戏独占模式）
+- 提权操作通过 UAC（ShellExecute runas）同步执行并捕获退出码
+- 定位发布包内 drivers/ 目录（exe 运行时相对路径 / 源码 dist 扫描）
+- GUI：系统 > 驱动管理... 一键安装 / 卸载
+
+16.5 共享数据层
 
 tools/config_io.py（CLI 和 GUI 共用）
 17. 蓝牙扫描
