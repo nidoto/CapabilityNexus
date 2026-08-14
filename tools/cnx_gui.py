@@ -67,7 +67,6 @@ class CapabilityNexusGUI:
 
         devices_menu = tk.Menu(menubar, tearoff=0)
         devices_menu.add_command(label=self.t("menu_add_device"), command=self.add_device_dialog)
-        devices_menu.add_command(label=self.t("menu_install_library"), command=self.install_from_library)
         devices_menu.add_separator()
         devices_menu.add_command(label=self.t("menu_refresh"), command=self.refresh_devices)
         menubar.add_cascade(label=self.t("menu_devices"), menu=devices_menu)
@@ -1134,14 +1133,14 @@ class CapabilityNexusGUI:
                 variable=use_library_var,
             ).pack(anchor=tk.W, padx=4, pady=2)
 
-            # 能力包
+            # 能力包（硬件库命中后自动确定，可留空）
             ttk.Label(bottom_frame, text=self.t("dlg_package")).pack(padx=4, pady=(6, 2))
             pkg_var = tk.StringVar(value="motion_demo")
             ttk.Entry(bottom_frame, textvariable=pkg_var).pack(fill=tk.X, padx=4)
 
             ttk.Button(
                 bottom_frame,
-                text=self.t("dlg_save"),
+                text=self.t("dlg_connect"),
                 command=lambda: save(conn_map[conn_var.get()], name_var, use_library_var, pkg_var),
             ).pack(padx=4, pady=8)
 
