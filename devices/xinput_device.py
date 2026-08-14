@@ -104,9 +104,13 @@ class XInputDevice:
                 self._last_state = None
                 print(f"[XInputDevice] Controller {self.index} connected")
 
+            # 始终发布当前状态，保证实时监控显示最新值
             if self._last_state is None or state.dwPacketNumber != self._last_state.dwPacketNumber:
                 self._emit_state(state)
                 self._last_state = state
+            else:
+                # 状态未变化时也发布（供实时监控持续显示）
+                self._emit_state(state)
 
             time.sleep(self.poll_interval)
 
