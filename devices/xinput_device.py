@@ -42,6 +42,25 @@ class XINPUT_STATE(ctypes.Structure):
 
 class XInputDevice:
 
+    @staticmethod
+    def detect_connected():
+        """返回已连接 XInput 设备的槽位列表 [0, 1, ...]"""
+        connected = []
+
+        try:
+            xinput = ctypes.windll.xinput1_4
+
+            for index in range(4):
+                state = XINPUT_STATE()
+                result = xinput.XInputGetState(index, ctypes.byref(state))
+
+                if result == 0:
+                    connected.append(index)
+        except Exception:
+            pass
+
+        return connected
+
     def __init__(self, event_bus, index=0, poll_interval=0.01):
         self.event_bus = event_bus
         self.index = index

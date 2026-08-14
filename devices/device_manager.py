@@ -123,7 +123,7 @@ class DeviceManager:
         if driver == "xinput":
             from devices.xinput_device import XInputDevice
 
-            index = detected.get("index", 0)
+            index = entry.get("index", detected.get("index", 0))
             device = XInputDevice(self.event_bus, index=index)
             device.connect()
             return device

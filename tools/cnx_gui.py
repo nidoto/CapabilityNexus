@@ -549,6 +549,41 @@ class CapabilityNexusGUI:
             elif conn_key == "hid":
                 field_vars["index"] = add_field(fields_frame, "Joystick index", "0")
                 show_bottom()
+            elif conn_key == "xinput":
+                try:
+                    from devices.xinput_device import XInputDevice
+
+                    available = XInputDevice.detect_connected()
+                except Exception:
+                    available = []
+
+                ttk.Label(
+                    fields_frame,
+                    text="Connected XInput devices:",
+                    font=("Segoe UI", 10, "bold"),
+                ).pack(anchor=tk.W, pady=(4, 2))
+
+                if not available:
+                    ttk.Label(
+                        fields_frame,
+                        text="(no XInput devices connected - connect a gamepad)",
+                        foreground="#c0392b",
+                    ).pack(anchor=tk.W, pady=2)
+                    hide_bottom()
+                else:
+                    index_var = tk.StringVar()
+                    field_vars["index"] = index_var
+
+                    for slot in available:
+                        ttk.Radiobutton(
+                            fields_frame,
+                            text=f"Controller {slot}",
+                            variable=index_var,
+                            value=str(slot),
+                        ).pack(anchor=tk.W, padx=8, pady=2)
+
+                    index_var.set(str(available[0]))
+                    show_bottom()
             elif conn_key in ("bluetooth", "ftms"):
                 # 蓝牙：搜索配对窗口
                 ttk.Button(
@@ -654,6 +689,9 @@ class CapabilityNexusGUI:
                 entry["address"] = bluetooth_selected.get("address")
             elif conn_key == "hid":
                 entry["driver"] = "hid"
+                entry["index"] = int(field_vars["index"].get() or 0)
+            elif conn_key == "xinput":
+                entry["driver"] = "xinput"
                 entry["index"] = int(field_vars["index"].get() or 0)
 
             data = config_io.load_config()
