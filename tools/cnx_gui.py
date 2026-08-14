@@ -18,7 +18,9 @@ class CapabilityNexusGUI:
         self.app = None
 
         self.root.title(self.t("app_title"))
-        self.root.geometry("1000x650")
+        self.root.geometry("1600x1000")
+        self.root.minsize(1280, 820)
+        self._configure_style()
 
         self._build_menubar()
         self._build_layout()
@@ -27,27 +29,81 @@ class CapabilityNexusGUI:
         self._start_monitor_loop()
         self.root.after(300, self._auto_start_engine)
 
+    def _configure_style(self):
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        self.root.configure(bg="#111827")
+        style.configure("TFrame", background="#111827")
+        style.configure("TLabelframe", background="#1b2535", bordercolor="#334155")
+        style.configure("TLabelframe.Label", background="#1b2535", foreground="#cbd5e1", font=("Segoe UI", 10, "bold"))
+        style.configure("TLabel", background="#111827", foreground="#cbd5e1")
+        style.configure("Title.TLabel", background="#111827", foreground="#f8fafc", font=("Segoe UI", 18, "bold"))
+        style.configure("Subtitle.TLabel", background="#111827", foreground="#94a3b8", font=("Segoe UI", 9))
+        style.configure("TButton", padding=(10, 6), background="#263449", foreground="#e2e8f0")
+        style.map("TButton", background=[("active", "#334155")])
+        style.configure("Accent.TButton", padding=(12, 7), background="#2563eb", foreground="#ffffff")
+        style.map("Accent.TButton", background=[("active", "#1d4ed8")])
+        style.configure("Treeview", background="#172033", fieldbackground="#172033", foreground="#dbeafe", rowheight=27, borderwidth=0)
+        style.configure("Treeview.Heading", background="#263449", foreground="#cbd5e1", padding=7, relief="flat")
+        style.map("Treeview", background=[("selected", "#1d4ed8")], foreground=[("selected", "#ffffff")])
+
+    def _set_engine_badge(self, running):
+        if not hasattr(self, "engine_badge"):
+            return
+        if running:
+            self.engine_badge.configure(text=self.t("ui_engine_online"), bg="#123b34", fg="#86efac")
+        else:
+            self.engine_badge.configure(text=self.t("ui_engine_offline"), bg="#3f1d2e", fg="#fda4af")
+
     def _auto_start_engine(self):
+        self._check_runtime_dependencies()
         if self.app is None:
             self.start_engine()
+
+    def _check_runtime_dependencies(self):
+        from tools.dependency_check import check_dependencies, missing_dependencies
+
+        status = check_dependencies()
+        missing = missing_dependencies(status)
+        if not missing:
+            return
+
+        details = "\n".join(f"- {item}" for item in missing)
+        message = (
+            "CapabilityNexus 依赖检查发现以下组件未安装：\n\n"
+            f"{details}\n\n"
+            "XInput 兼容控制器输出或游戏独占模式可能无法使用。"
+        )
+        self.log("Missing runtime dependencies: " + ", ".join(missing))
+        messagebox.showwarning("运行依赖缺失", message)
 
     def _start_monitor_loop(self):
         self._monitor_job = self.root.after(200, self._monitor_tick)
 
     def _monitor_tick(self):
         self._refresh_live_values()
+        self._render_request_tree()
+        self._render_request_monitor()
         self._monitor_job = self.root.after(200, self._monitor_tick)
 
     def t(self, key):
         return self.i18n.t(key)
 
     def _rebuild(self):
+        if getattr(self, "_monitor_job", None) is not None:
+            self.root.after_cancel(self._monitor_job)
+            self._monitor_job = None
+
         for widget in self.root.winfo_children():
             widget.destroy()
 
         self._build_menubar()
         self._build_layout()
         self.refresh_devices()
+        self._start_monitor_loop()
 
     #
     # Menu bar
@@ -67,6 +123,7 @@ class CapabilityNexusGUI:
 
         devices_menu = tk.Menu(menubar, tearoff=0)
         devices_menu.add_command(label=self.t("menu_add_device"), command=self.add_device_dialog)
+        devices_menu.add_command(label=self.t("menu_history_devices"), command=self.show_history_devices)
         devices_menu.add_separator()
         devices_menu.add_command(label=self.t("menu_refresh"), command=self.refresh_devices)
         menubar.add_cascade(label=self.t("menu_devices"), menu=devices_menu)
@@ -104,16 +161,37 @@ class CapabilityNexusGUI:
     #
 
     def _build_layout(self):
+        header = tk.Frame(self.root, bg="#111827", height=78)
+        header.pack(fill=tk.X, padx=18, pady=(14, 10))
+        header.pack_propagate(False)
+
+        identity = ttk.Frame(header)
+        identity.pack(side=tk.LEFT, fill=tk.Y)
+        ttk.Label(identity, text="CapabilityNexus", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(identity, text=self.t("ui_subtitle"), style="Subtitle.TLabel").pack(anchor=tk.W, pady=(2, 0))
+
+        actions = ttk.Frame(header)
+        actions.pack(side=tk.RIGHT, fill=tk.Y)
+        self.engine_badge = tk.Label(actions, text=self.t("ui_engine_offline"), bg="#3f1d2e", fg="#fda4af", font=("Segoe UI", 9, "bold"), padx=8, pady=5)
+        self.engine_badge.pack(side=tk.LEFT, padx=(0, 10), pady=17)
+        ttk.Button(actions, text=self.t("ui_start_engine"), style="Accent.TButton", command=self.start_engine).pack(side=tk.LEFT, padx=3, pady=15)
+        ttk.Button(actions, text=self.t("ui_stop_engine"), command=self.stop_engine).pack(side=tk.LEFT, padx=3, pady=15)
+        ttk.Button(actions, text=self.t("ui_refresh"), command=self.refresh_devices).pack(side=tk.LEFT, padx=(3, 0), pady=15)
+        self._set_engine_badge(self.app is not None)
+
         main = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main.pack(fill=tk.BOTH, expand=True)
+        main.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 8))
 
-        left = ttk.Frame(main)
-        right = ttk.Frame(main)
-        main.add(left, weight=1)
-        main.add(right, weight=2)
+        col_input = ttk.Frame(main)
+        col_output = ttk.Frame(main)
+        col_request = ttk.Frame(main)
+        main.add(col_input, weight=1)
+        main.add(col_output, weight=1)
+        main.add(col_request, weight=1)
 
-        self._build_device_tree(left)
-        self._build_output_panel(right)
+        self._build_device_tree(col_input)
+        self._build_output_panel(col_output)
+        self._build_request_panel(col_request)
 
         self._build_log_panel(self.root)
 
@@ -125,16 +203,12 @@ class CapabilityNexusGUI:
         self.device_tree.heading("#0", text=self.t("tree_device_function"))
         self.device_tree.heading("func", text=self.t("tree_mapping"))
         self.device_tree.column("func", width=120)
-        self.device_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self.device_tree.configure(height=14)
+        self.device_tree.pack(fill=tk.BOTH, expand=False, padx=6, pady=6)
 
         self.device_tree.bind("<Double-1>", self._on_tree_double_click)
         self.device_tree.bind("<Return>", self._on_tree_double_click)
         self.device_tree.bind("<Button-3>", self._on_tree_right_click)
-
-        btns = ttk.Frame(box)
-        btns.pack(fill=tk.X, padx=6, pady=4)
-        ttk.Button(btns, text=self.t("btn_add_device"), command=self.add_device_dialog).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btns, text=self.t("btn_remove_device"), command=self.remove_selected_device).pack(side=tk.LEFT, padx=2)
 
         self.tree_menu = tk.Menu(self.root, tearoff=0)
         self.tree_menu.add_command(label=self.t("btn_add_device"), command=self.add_device_dialog)
@@ -152,15 +226,25 @@ class CapabilityNexusGUI:
         mon = ttk.LabelFrame(parent, text=self.t("mon_input"))
         mon.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
 
-        self.input_monitor = tk.Text(mon, height=6, state=tk.DISABLED)
-        self.input_monitor.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.input_monitor = tk.Text(mon, height=10, state=tk.DISABLED, bg="#0f172a", fg="#67e8f9", relief=tk.FLAT, padx=8, pady=6, font=("Consolas", 9))
+        scrollbar = ttk.Scrollbar(mon, command=self.input_monitor.yview)
+        self.input_monitor.configure(yscrollcommand=scrollbar.set)
+        mon.columnconfigure(0, weight=1)
+        mon.rowconfigure(0, weight=1)
+        self.input_monitor.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
+        scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=4)
 
     def _build_output_monitor(self, parent):
         mon = ttk.LabelFrame(parent, text=self.t("mon_output"))
         mon.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
 
-        self.output_monitor = tk.Text(mon, height=6, state=tk.DISABLED)
-        self.output_monitor.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.output_monitor = tk.Text(mon, height=10, state=tk.DISABLED, bg="#0f172a", fg="#86efac", relief=tk.FLAT, padx=8, pady=6, font=("Consolas", 9))
+        scrollbar = ttk.Scrollbar(mon, command=self.output_monitor.yview)
+        self.output_monitor.configure(yscrollcommand=scrollbar.set)
+        mon.columnconfigure(0, weight=1)
+        mon.rowconfigure(0, weight=1)
+        self.output_monitor.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
+        scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=4)
 
     def _append_monitor(self, widget, text):
         widget.config(state=tk.NORMAL)
@@ -181,6 +265,11 @@ class CapabilityNexusGUI:
             self.device_tree.selection_set(item)
 
         self.tree_menu.tk_popup(event.x_root, event.y_root)
+
+    def _reload_runtime_mapping(self, profile):
+        if self.app is None or not hasattr(self.app, "mapping_engine"):
+            return
+        self.app.mapping_engine.load_mappings(profile.get("mappings", {}))
 
     def _find_device_node(self, item_id):
         while item_id:
@@ -222,12 +311,78 @@ class CapabilityNexusGUI:
             self.log("Device not found in config.")
             return
 
+        if self.app is not None and hasattr(self.app, "device_manager"):
+            self.app.device_manager.disconnect_device(device)
+
         devices.remove(device)
         data["devices"] = devices
         config_io.save_config(data)
 
         self.refresh_devices()
         self.log(f"Removed device: {device.get('name')}")
+
+    def show_history_devices(self):
+        """显示历史设备列表（用户曾连接过，可能当前不在线）"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t("menu_history_devices"))
+        dialog.geometry("480x360")
+
+        ttk.Label(
+            dialog,
+            text=self.t("dlg_history_hint"),
+            wraplength=440,
+        ).pack(padx=8, pady=8, fill=tk.X)
+
+        self.history_list = tk.Listbox(dialog)
+        self.history_list.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        data = config_io.load_config()
+        devices = data.get("devices", [])
+
+        online_names = set()
+
+        if self.app is not None and hasattr(self.app, "device_manager"):
+            for entry in self.app.device_manager.online_devices():
+                online_names.add(entry.get("name"))
+
+        for device in devices:
+            name = device.get("name", "?")
+            conn = config_io.device_conn_label(device)
+            status = "在线" if name in online_names else "离线"
+            self.history_list.insert(tk.END, f"[{status}] {name}  ({conn})")
+
+        if not devices:
+            self.history_list.insert(tk.END, "(无历史设备记录)")
+
+        def remove_selected():
+            sel = self.history_list.curselection()
+
+            if not sel:
+                self.log("Select a history device to remove.")
+                return
+
+            # 列表条目按 devices 顺序插入，索引对应
+            idx = sel[0]
+
+            if idx >= len(devices):
+                return
+
+            device = devices[idx]
+
+            if not messagebox.askyesno(
+                self.t("menu_history_devices"),
+                f"Remove '{device.get('name')}' from history?",
+            ):
+                return
+
+            devices.remove(device)
+            data["devices"] = devices
+            config_io.save_config(data)
+            self.history_list.delete(idx)
+            self.log(f"Removed history device: {device.get('name')}")
+
+        btn = ttk.Button(dialog, text=self.t("btn_remove_device"), command=remove_selected)
+        btn.pack(padx=8, pady=8)
 
     def _build_output_panel(self, parent):
         box = ttk.LabelFrame(parent, text=self.t("tree_outputs"))
@@ -237,15 +392,22 @@ class CapabilityNexusGUI:
         self.output_tree.heading("#0", text=self.t("tree_output_device"))
         self.output_tree.heading("func", text=self.t("tree_mapping"))
         self.output_tree.column("func", width=120)
-        self.output_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self.output_tree.configure(height=14)
+        self.output_tree.pack(fill=tk.BOTH, expand=False, padx=6, pady=6)
 
         self.output_tree.bind("<Double-1>", self._on_output_tree_double_click)
         self.output_tree.bind("<Return>", self._on_output_tree_double_click)
+        self.output_tree.bind("<Button-3>", self._on_output_tree_right_click)
 
-        btns = ttk.Frame(box)
-        btns.pack(fill=tk.X, padx=6, pady=4)
-        ttk.Button(btns, text=self.t("btn_add_output"), command=self.add_output_dialog).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btns, text=self.t("btn_remove_output"), command=self.remove_selected_output).pack(side=tk.LEFT, padx=2)
+        self.output_tree_menu = tk.Menu(self.root, tearoff=0)
+        self.output_tree_menu.add_command(
+            label=self.t("btn_add_output"),
+            command=self.add_output_dialog,
+        )
+        self.output_tree_menu.add_command(
+            label=self.t("btn_remove_output"),
+            command=self.remove_selected_output,
+        )
 
         hint = ttk.Label(box, text=self.t("tree_output_hint"))
         hint.pack(pady=4)
@@ -253,6 +415,375 @@ class CapabilityNexusGUI:
         self._build_output_monitor(box)
 
         self.refresh_outputs()
+
+    def _build_request_panel(self, parent):
+        box = ttk.LabelFrame(parent, text=self.t("panel_requests"))
+        box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        # 当前程序：识别用户运行的程序，匹配反向需求库
+        prog = ttk.LabelFrame(box, text=self.t("prog_current"))
+        prog.pack(fill=tk.X, padx=6, pady=(4, 2))
+
+        row = ttk.Frame(prog)
+        row.pack(fill=tk.X, padx=4, pady=4)
+
+        # 可输入过滤：输入关键字（如 gta）即过滤进程列表
+        self.proc_combo = ttk.Combobox(row)
+        self.proc_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.proc_combo.bind("<KeyRelease>", self._on_proc_filter)
+        self.proc_combo.bind("<<ComboboxSelected>>", self._on_proc_selected)
+        self.proc_combo.bind("<Return>", self._on_proc_filter)
+
+        self.proc_refresh_btn = ttk.Button(
+            row,
+            text=self.t("btn_refresh_proc"),
+            command=self._refresh_process_list,
+        )
+        self.proc_refresh_btn.pack(side=tk.LEFT, padx=2)
+
+        self.prog_status = ttk.Label(
+            prog,
+            text=self.t("prog_status_none"),
+            foreground="#666",
+            wraplength=260,
+        )
+        self.prog_status.pack(fill=tk.X, padx=4, pady=(0, 4))
+
+        self._refresh_process_list()
+
+        self._build_request_monitor(box)
+
+    def _refresh_process_list(self):
+        """枚举进程并回填下拉框（ctypes 极快，同步执行）"""
+        from devices.process_list import list_processes
+
+        try:
+            self._process_entries = list_processes()
+        except Exception as e:
+            print("[ProcessList] enumerate failed:", e)
+            self._process_entries = []
+
+        self._apply_proc_filter()
+
+    def _apply_proc_filter(self):
+        """仅内存过滤，不重新枚举进程"""
+        if not hasattr(self, "_process_entries"):
+            self._process_entries = []
+
+        query = self._current_proc_filter()
+
+        labels = []
+        self._process_keys = []
+
+        for entry in self._process_entries:
+            name = entry.get("name", "")
+            pid = entry.get("pid")
+            title = entry.get("title", "")
+
+            if title:
+                label = f"{name} (PID {pid}) - {title[:40]}"
+            else:
+                label = f"{name} (PID {pid})"
+
+            # 关键字匹配进程名或窗口标题
+            if query:
+                haystack = f"{name} {title}".lower()
+                if query not in haystack:
+                    continue
+
+            labels.append(label)
+            self._process_keys.append(entry)
+
+        self.proc_combo["values"] = labels
+
+    def _current_proc_filter(self):
+        try:
+            return (self.proc_combo.get() or "").strip().lower()
+        except Exception:
+            return ""
+
+    def _on_proc_filter(self, event):
+        """输入关键字：内存过滤进程列表，不重新枚举"""
+        self._apply_proc_filter()
+
+        # 若输入已精确命中某个进程名，自动识别
+        query = self._current_proc_filter()
+
+        if query:
+            for entry in self._process_entries:
+                if (entry.get("name") or "").lower() == query:
+                    self.proc_combo.selection_clear()
+                    self._identify_process(entry)
+                    return
+
+    def _on_proc_selected(self, event):
+        """从下拉列表选择后自动识别"""
+        index = self.proc_combo.current()
+
+        if index < 0 or index >= len(self._process_keys):
+            return
+
+        self._identify_process(self._process_keys[index])
+
+    def _identify_process(self, entry):
+        """识别进程：匹配反向需求库并导入"""
+        from devices.process_list import process_exe_name
+        exe_name = process_exe_name(entry)
+        self._selected_process_label = f"{entry.get('name')} (PID {entry.get('pid')})"
+
+        self.log(f"{self.t('log_selected_proc')}: {entry.get('name')} (PID {entry.get('pid')})")
+        self.prog_status.config(text="正在检索程序需求库...", foreground="#2563eb")
+
+        import threading
+
+        def worker():
+            try:
+                from devices.request_library import RequestLibrary
+
+                library = RequestLibrary()
+                library.ensure_loaded()
+                matched = library.identify(exe_name)
+                if matched is None:
+                    result = ("unmatched", exe_name, None)
+                else:
+                    program_id = matched.get("id")
+                    downloaded = library.download(program_id)
+                    result = (
+                        "matched" if downloaded is not None else "download_failed",
+                        matched.get("name", program_id),
+                        downloaded,
+                    )
+            except Exception as error:
+                result = ("error", str(error), None)
+
+            self.root.after(0, lambda: apply_result(result))
+
+        def apply_result(result):
+            status, value, downloaded = result
+            if status == "unmatched":
+                self.prog_status.config(
+                    text=self.t("prog_status_unmatched").format(value),
+                    foreground="#c0392b",
+                )
+                self.log(self.t("log_unmatched_proc"))
+            elif status == "download_failed":
+                self.prog_status.config(
+                    text=self.t("prog_status_download_fail").format(value),
+                    foreground="#c0392b",
+                )
+            elif status == "error":
+                self.prog_status.config(text=f"需求库检索失败：{value}", foreground="#c0392b")
+                self.log(f"Request library failed: {value}")
+            else:
+                self._current_program = downloaded
+                self._import_request_config(downloaded)
+                self.prog_status.config(
+                    text=self.t("prog_status_matched").format(value),
+                    foreground="#2e7d32",
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _import_request_config(self, config):
+        """导入反向需求配置：把已知请求写入 StatusMonitor 持久列表"""
+        if self.app is None or not hasattr(self.app, "status_monitor"):
+            return
+
+        requests = (config.get("requests_data") or {}).get("requests", {})
+
+        if not isinstance(requests, dict):
+            requests = {}
+
+        source = config.get("source", config.get("id", "library"))
+
+        with self.app.status_monitor._lock:
+            for target, info in requests.items():
+                value = self._request_default_value(info)
+
+                if target not in self.app.status_monitor.request_values:
+                    self.app.status_monitor.request_values[target] = value
+                    self.app.status_monitor.request_sources[target] = source
+
+        self.log(self.t("log_imported_req").format(len(requests)))
+
+        mapping = config.get("mapping") or (config.get("requests_data") or {}).get("mapping", {})
+
+        if mapping:
+            self._apply_request_mapping(mapping)
+
+        self._render_request_tree()
+        self._render_request_monitor()
+
+    def _request_default_value(self, info):
+        if isinstance(info, dict):
+            if info.get("default") is not None:
+                return float(info["default"])
+
+            rng = info.get("range")
+            if isinstance(rng, list) and len(rng) >= 2:
+                return float(rng[1])
+
+            return 0.0
+
+        if info is not None:
+            return float(info)
+
+        return 0.0
+
+    def _apply_request_mapping(self, mapping):
+        profile = config_io.load_profile()
+        existing = profile.get("mappings", {})
+
+        added = 0
+
+        for source, target in mapping.items():
+            if source in existing:
+                continue
+            existing[source] = [{
+                "target": target,
+                "gain": 1.0,
+                "return_to_center": False,
+            }]
+            added += 1
+
+        profile["mappings"] = existing
+        config_io.save_profile(profile)
+
+        if added and self.app is not None:
+            self.app.request_handler.set_mappings(existing)
+
+        self.refresh_mappings()
+        self.log(self.t("log_applied_mapping").format(added))
+
+    def _build_request_monitor(self, parent):
+        mon = ttk.LabelFrame(parent, text=self.t("mon_request"))
+        mon.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
+
+        self.request_monitor = tk.Text(
+            mon,
+            height=8,
+            state=tk.DISABLED,
+            bg="#0f172a",
+            fg="#fbbf24",
+            relief=tk.FLAT,
+            padx=8,
+            pady=6,
+            font=("Consolas", 9),
+        )
+        scrollbar = ttk.Scrollbar(mon, command=self.request_monitor.yview)
+        self.request_monitor.configure(yscrollcommand=scrollbar.set)
+        self.request_monitor.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 0), pady=4)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 4), pady=4)
+
+    def _on_request_double_click(self, event):
+        self.map_selected_request()
+
+    def _clear_requests(self):
+        if self.app is None or not hasattr(self.app, "status_monitor"):
+            return
+
+        self.app.status_monitor.clear_requests()
+
+        self._render_request_tree()
+        self._render_request_monitor()
+
+    def map_selected_request(self):
+        selection = self.request_tree.selection()
+
+        if not selection:
+            self.log(self.t("log_no_request"))
+            return
+
+        item = self.request_tree.item(selection[0])
+        text = item.get("text", "")
+        target = text.split(" -> ")[-1].strip()
+
+        if not target or "=" in target:
+            self.log(self.t("log_no_request"))
+            return
+
+        self._map_request_to_real(target)
+
+    def _map_request_to_real(self, target):
+        profile = config_io.load_profile()
+        mappings = profile.get("mappings", {})
+
+        existing = mappings.get(target)
+        if existing:
+            self.log(f"{target} already mapped: {config_io.mapping_desc(existing)}")
+            return
+
+        mappings[target] = [{
+            "target": target,
+            "gain": 1.0,
+            "return_to_center": False,
+        }]
+        config_io.save_profile(profile)
+
+        self.refresh_mappings()
+        self.log(f"{self.t('log_mapped_request')}: {target} -> {target}")
+        self._render_request_tree()
+
+        if self.app is not None:
+            self.app.request_handler.set_mappings(mappings)
+
+    def _render_request_tree(self):
+        if not hasattr(self, "request_tree"):
+            return
+
+        self.request_tree.delete(*self.request_tree.get_children())
+
+        if self.app is None or not hasattr(self.app, "status_monitor"):
+            return
+
+        requests = self.app.status_monitor.all_requests()
+        if not requests:
+            return
+
+        profile = config_io.load_profile()
+        mappings = profile.get("mappings", {})
+
+        for target, (source, value) in requests.items():
+            mapped = target in mappings
+
+            self.request_tree.insert(
+                "",
+                tk.END,
+                text=f"{source} -> {target}",
+                values=(f"{value:.0f}", "mapped" if mapped else "unmapped"),
+                tags=("request", "mapped") if mapped else ("request", "unmapped"),
+            )
+
+        self.request_tree.tag_configure("mapped", foreground="#2e7d32")
+        self.request_tree.tag_configure("unmapped", foreground="#c0392b")
+
+    def _render_request_monitor(self):
+        if not hasattr(self, "request_monitor"):
+            return
+
+        self.request_monitor.config(state=tk.NORMAL)
+        self.request_monitor.delete("1.0", tk.END)
+
+        if self.app is not None and hasattr(self.app, "status_monitor"):
+            requests = self.app.status_monitor.all_requests()
+            history = self.app.status_monitor.recent_requests()
+
+            selected = getattr(self, "_selected_process_label", "未绑定程序")
+            self.request_monitor.insert(tk.END, f"程序: {selected}\n")
+            self.request_monitor.insert(tk.END, "最近请求:\n")
+
+            if history:
+                for timestamp, source, target, value in history:
+                    self.request_monitor.insert(
+                        tk.END,
+                        f"{timestamp}  {source} -> {target} = {value:.0f}\n",
+                    )
+            else:
+                for target, (source, value) in requests.items():
+                    self.request_monitor.insert(tk.END, f"{source} -> {target} = {value:.0f}\n")
+
+        self.request_monitor.config(state=tk.DISABLED)
+        self.request_monitor.see(tk.END)
 
     def _output_type_info(self):
         from output.devices import OUTPUT_DEVICES
@@ -371,6 +902,9 @@ class CapabilityNexusGUI:
             })
             config_io.save_outputs({"outputs": entries})
 
+            if self.app is not None and hasattr(self.app, "output_manager"):
+                self.app.output_manager.add_runtime(entries[-1])
+
             self.refresh_outputs()
             self.log(f"Added output: {name}")
             dialog.destroy()
@@ -419,14 +953,17 @@ class CapabilityNexusGUI:
         entries.remove(device)
         config_io.save_outputs({"outputs": entries})
 
+        if self.app is not None and hasattr(self.app, "output_manager"):
+            self.app.output_manager.remove_runtime(device.get("id"))
+
         self.refresh_outputs()
         self.log(f"Removed output: {device.get('name', device.get('id'))}")
 
     def _build_log_panel(self, parent):
         logbox = ttk.LabelFrame(parent, text=self.t("panel_log"))
-        logbox.pack(fill=tk.X, padx=8, pady=(0, 8))
+        logbox.pack(fill=tk.X, padx=12, pady=(0, 10))
 
-        self.log_text = tk.Text(logbox, height=6, state=tk.DISABLED)
+        self.log_text = tk.Text(logbox, height=5, state=tk.DISABLED, bg="#0f172a", fg="#94a3b8", relief=tk.FLAT, padx=8, pady=5, font=("Consolas", 9))
         self.log_text.pack(fill=tk.X, padx=6, pady=6)
 
     #
@@ -442,6 +979,13 @@ class CapabilityNexusGUI:
         mappings = profile.get("mappings", {})
         mapped = set(mappings.keys())
 
+        # 引擎运行时：只显示当前在线的设备；未运行时显示 config 记录
+        if self.app is not None and hasattr(self.app, "device_manager"):
+            online = self.app.device_manager.online_devices()
+            devices = online
+        else:
+            devices = data.get("devices", [])
+
         def mapped_target(cap_id):
             m = mappings.get(cap_id)
 
@@ -450,7 +994,7 @@ class CapabilityNexusGUI:
 
             return config_io.mapping_desc(m)
 
-        for device in data.get("devices", []):
+        for device in devices:
             name = device.get("name", "?")
             package = device.get("package", "")
             conn = config_io.device_conn_label(device)
@@ -545,6 +1089,12 @@ class CapabilityNexusGUI:
             text = item.get("text")
             target = text.split("  (")[0]
             self._open_reverse_map_dialog(target)
+
+    def _on_output_tree_right_click(self, event):
+        item = self.output_tree.identify_row(event.y)
+        if item:
+            self.output_tree.selection_set(item)
+        self.output_tree_menu.tk_popup(event.x_root, event.y_root)
 
     #
     # Mapping
@@ -732,6 +1282,7 @@ class CapabilityNexusGUI:
                 profile["mappings"][source] = [new_mapping]
 
             config_io.save_profile(profile)
+            self._reload_runtime_mapping(profile)
 
             self.refresh_mappings()
             self.log(f"{self.t('log_mapped')} {source} -> {target}")
@@ -831,6 +1382,7 @@ class CapabilityNexusGUI:
 
             profile["mappings"] = mappings
             config_io.save_profile(profile)
+            self._reload_runtime_mapping(profile)
 
             self.refresh_mappings()
             self.log(f"Mapped {source} -> {target}" if source else f"Unmapped {target}")
@@ -871,6 +1423,7 @@ class CapabilityNexusGUI:
             del mappings[source]
             profile["mappings"] = mappings
             config_io.save_profile(profile)
+            self._reload_runtime_mapping(profile)
 
             self.refresh_mappings()
             self.log(f"{self.t('log_removed_mapping')}: {source}")
@@ -985,9 +1538,14 @@ class CapabilityNexusGUI:
         field_vars = {}
         bluetooth_selected = {}
 
-        # 底部区（名称/硬件库检索/能力包/保存）——连接成功后显示
+        # Bottom section contains optional device metadata.
         bottom_frame = ttk.Frame(dialog)
         bottom_frame.pack(fill=tk.X, padx=8, pady=6)
+
+        name_var = tk.StringVar()
+        use_library_var = tk.BooleanVar(value=True)
+        pkg_var = tk.StringVar(value="motion_demo")
+        result_text = tk.StringVar(value="等待连接")
 
         def add_field(parent, label, default):
             frame = ttk.Frame(parent)
@@ -1021,9 +1579,13 @@ class CapabilityNexusGUI:
                 show_bottom()
             elif conn_key == "xinput":
                 try:
-                    from devices.xinput_device import XInputDevice
+                    device_manager = getattr(self.app, "device_manager", None)
+                    if device_manager is not None:
+                        available = device_manager.detected_xinput_indices()
+                    else:
+                        from devices.xinput_device import XInputDevice
 
-                    available = XInputDevice.detect_connected()
+                        available = XInputDevice.detect_connected()
                 except Exception:
                     available = []
 
@@ -1062,16 +1624,15 @@ class CapabilityNexusGUI:
 
                         def make_connect(cbtn, dbtn, slabel, svalue):
                             def connect():
-                                connected_var.set(svalue)
+                                save("xinput", int(svalue))
+                                show_bottom()
                                 slabel.config(text="Connected")
                                 cbtn.state(["disabled"])
                                 dbtn.state(["!disabled"])
-                                show_bottom()
                             return connect
 
                         def make_disconnect(cbtn, dbtn, slabel):
                             def disconnect():
-                                connected_var.set("")
                                 slabel.config(text="Not connected")
                                 cbtn.state(["!disabled"])
                                 dbtn.state(["disabled"])
@@ -1103,6 +1664,14 @@ class CapabilityNexusGUI:
             else:
                 show_bottom()
 
+            if conn_key != "xinput":
+                ttk.Button(
+                    fields_frame,
+                    text=self.t("dlg_connect"),
+                    style="Accent.TButton",
+                    command=lambda: save(conn_key),
+                ).pack(anchor=tk.E, pady=(12, 4))
+
         def on_bluetooth_picked(device_info):
             bluetooth_selected.update(device_info)
 
@@ -1122,11 +1691,9 @@ class CapabilityNexusGUI:
 
             # 自定义名称
             ttk.Label(bottom_frame, text=self.t("dlg_custom_name")).pack(padx=4, pady=(6, 2))
-            name_var = tk.StringVar()
             ttk.Entry(bottom_frame, textvariable=name_var).pack(fill=tk.X, padx=4)
 
             # 硬件库检索勾选
-            use_library_var = tk.BooleanVar(value=True)
             ttk.Checkbutton(
                 bottom_frame,
                 text=self.t("dlg_use_library"),
@@ -1135,16 +1702,61 @@ class CapabilityNexusGUI:
 
             # 能力包（硬件库命中后自动确定，可留空）
             ttk.Label(bottom_frame, text=self.t("dlg_package")).pack(padx=4, pady=(6, 2))
-            pkg_var = tk.StringVar(value="motion_demo")
             ttk.Entry(bottom_frame, textvariable=pkg_var).pack(fill=tk.X, padx=4)
+
+            ttk.Label(
+                bottom_frame,
+                textvariable=result_text,
+                foreground="#2563eb",
+                wraplength=460,
+            ).pack(fill=tk.X, padx=4, pady=(6, 2))
 
             ttk.Button(
                 bottom_frame,
-                text=self.t("dlg_connect"),
-                command=lambda: save(conn_map[conn_var.get()], name_var, use_library_var, pkg_var),
+                text=self.t("dlg_close"),
+                command=dialog.destroy,
             ).pack(padx=4, pady=8)
 
-        def save(conn_key, name_var, use_library_var, pkg_var):
+        library_busy = False
+
+        def finish_save(entry, library_result):
+            nonlocal library_busy
+            library_busy = False
+
+            status, detail = library_result
+            if status == "matched":
+                result_text.set(f"已连接，硬件库命中：{detail}")
+                self.log(f"Library match: {detail}")
+            elif status == "not_found":
+                result_text.set("已连接，硬件库中未找到匹配设备")
+            elif status == "skipped":
+                result_text.set("已连接，已跳过硬件库检索")
+            else:
+                result_text.set(f"已连接，硬件库检索失败：{detail}")
+                self.log(f"Library lookup failed: {detail}")
+
+            data = config_io.load_config()
+            data.setdefault("devices", []).append(entry)
+            config_io.save_config(data)
+
+            if self.app is not None and hasattr(self.app, "device_manager"):
+                self.app.device_manager.connect_device(
+                    {
+                        "type": entry.get("driver"),
+                        "index": entry.get("index"),
+                        "fingerprint": {"type": entry.get("driver")},
+                    },
+                    entry,
+                )
+
+            self.refresh_devices()
+            self.log(f"{self.t('log_added_device')}: {entry.get('name')}")
+
+        def save(conn_key, xinput_index=None):
+            nonlocal library_busy
+            if library_busy:
+                return
+
             driver = conn_key
 
             if conn_key in ("tcp", "udp", "bluetooth", "custom"):
@@ -1194,9 +1806,7 @@ class CapabilityNexusGUI:
                 entry["driver"] = "hid"
                 entry["index"] = int(field_vars["index"].get() or 0)
             elif conn_key == "xinput":
-                connected_index = field_vars.get("connected_index")
-
-                if not connected_index or not connected_index.get():
+                if xinput_index is None:
                     messagebox.showwarning(
                         self.t("dlg_no_target"),
                         "Connect a controller first",
@@ -1204,48 +1814,48 @@ class CapabilityNexusGUI:
                     return
 
                 entry["driver"] = "xinput"
-                entry["index"] = int(connected_index.get())
+                entry["index"] = int(xinput_index)
 
-            data = config_io.load_config()
+            if not use_library_var.get():
+                finish_save(entry, ("skipped", ""))
+                return
 
-            if use_library_var.get():
+            result_text.set("正在检索 GitHub 硬件库...")
+            library_busy = True
+
+            fingerprint = None
+            if conn_key == "serial":
+                fingerprint = {"type": "serial", "vid": field_vars["port"].get()}
+            elif conn_key == "xinput":
+                fingerprint = {"type": "xinput"}
+
+            import threading
+
+            def lookup_library():
                 try:
                     from devices.device_library import DeviceLibrary
 
                     library = DeviceLibrary(
-                        cache_path=os.path.join("config", "device_library_cache.json"),
+                        cache_path=os.path.join(
+                            os.path.dirname(config_io.CONFIG_PATH),
+                            "device_library_cache.json",
+                        ),
                     )
                     library.refresh()
-
-                    fingerprint = None
-                    if conn_key == "serial":
-                        fingerprint = {
-                            "type": "serial",
-                            "vid": field_vars["port"].get(),
-                        }
-                    elif conn_key == "xinput":
-                        fingerprint = {"type": "xinput"}
-
-                    detected = {"fingerprint": fingerprint or {}}
-                    matched = library.identify(detected) if fingerprint else None
-
+                    matched = library.identify({"fingerprint": fingerprint or {}}) if fingerprint else None
                     if matched:
-                        library.install(
-                            matched.get("id"),
-                            packages_path=config_io.PACKAGES_PATH,
-                        )
+                        library.install(matched.get("id"), packages_path=config_io.PACKAGES_PATH)
                         entry["package"] = matched.get("package", entry.get("package"))
                         entry["library_id"] = matched.get("id")
-                        self.log(f"Library match: {matched.get('name')}")
-                except Exception as e:
-                    self.log(f"Library lookup failed: {e}")
+                        result = ("matched", matched.get("name", matched.get("id")))
+                    else:
+                        result = ("not_found", "")
+                except Exception as error:
+                    result = ("failed", str(error))
 
-            data["devices"].append(entry)
-            config_io.save_config(data)
+                self.root.after(0, lambda: finish_save(entry, result))
 
-            self.refresh_devices()
-            self.log(f"{self.t('log_added_device')}: {entry.get('name')}")
-            dialog.destroy()
+            threading.Thread(target=lookup_library, daemon=True).start()
 
         def on_conn_change(*_args):
             build_fields(conn_map[conn_var.get()])
@@ -1272,19 +1882,36 @@ class CapabilityNexusGUI:
         devices = []
         scanner = BluetoothScanner()
         result_queue = queue.Queue()
+        closed = False
+        poll_job = None
 
         def worker_paired():
-            paired = scanner.list_paired_ble()
-            result_queue.put(("paired", paired))
+            try:
+                paired = scanner.list_paired_ble()
+                result_queue.put(("paired", paired))
+            except Exception as error:
+                result_queue.put(("error", str(error)))
 
         def worker_scan():
-            found = scanner.scan_ble(timeout=5)
-            result_queue.put(("scan", found))
+            try:
+                found = scanner.scan_ble(timeout=5)
+                result_queue.put(("scan", found))
+            except Exception as error:
+                result_queue.put(("error", str(error)))
 
         def poll_queue():
+            nonlocal poll_job
+            if closed or not dialog.winfo_exists():
+                return
             try:
                 while True:
                     kind, payload = result_queue.get_nowait()
+
+                    if kind == "error":
+                        self.log(f"Bluetooth scan failed: {payload}")
+                        self.bt_list.delete(0, tk.END)
+                        self.bt_list.insert(tk.END, "(scan failed)")
+                        continue
 
                     if kind == "paired":
                         self.bt_list.delete(0, tk.END)
@@ -1328,7 +1955,7 @@ class CapabilityNexusGUI:
             except queue.Empty:
                 pass
 
-            self.root.after(100, poll_queue)
+            poll_job = self.root.after(100, poll_queue)
 
         def search_new():
             self.bt_list.delete(0, tk.END)
@@ -1341,7 +1968,7 @@ class CapabilityNexusGUI:
         def select():
             index = self.bt_list.curselection()
 
-            if not index:
+            if not index or index[0] >= len(devices):
                 return
 
             device_info = devices[index[0]]
@@ -1364,6 +1991,15 @@ class CapabilityNexusGUI:
         btns.pack(fill=tk.X, padx=8, pady=6)
         ttk.Button(btns, text="Search New Devices...", command=search_new).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns, text=self.t("dlg_apply"), command=select).pack(side=tk.LEFT, padx=2)
+
+        def close_dialog():
+            nonlocal closed
+            closed = True
+            if poll_job is not None:
+                self.root.after_cancel(poll_job)
+            dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", close_dialog)
 
         import threading
         threading.Thread(target=worker_paired, daemon=True).start()
@@ -1409,8 +2045,13 @@ class CapabilityNexusGUI:
 
             self.app = CapabilityNexusApp()
             self.log("Engine started.")
+            self._set_engine_badge(True)
         except Exception as e:
             self.log(f"Engine start failed: {e}")
+            self._set_engine_badge(False)
+            return
+
+        self.refresh_devices()
 
     def stop_engine(self):
         if self.app is None:
@@ -1424,6 +2065,9 @@ class CapabilityNexusGUI:
 
         self.app = None
         self.log("Engine stopped.")
+        self._set_engine_badge(False)
+
+        self.refresh_devices()
 
     def _capability_category(self, cap_id):
         if not hasattr(self, "_cat_map"):
@@ -1472,44 +2116,40 @@ class CapabilityNexusGUI:
 
         monitor = self.app.status_monitor
 
-        inputs = monitor.snapshot_inputs()
-        outputs = monitor.snapshot_outputs()
+        # 两个监控窗口共用同一逻辑：
+        # 只显示"已连接且有真实输入"的通道（当前值偏离基线）。
+        # 漂移值（静止非零，等于基线）不显示；
+        # 按住按钮 / 推住摇杆（偏离基线）一直显示最新值；
+        # 松开回中 / 设备断开后自动消失。
+        self._render_monitor(
+            self.input_monitor,
+            monitor.active_inputs(),
+            self._format_input,
+        )
+        self._render_monitor(
+            self.output_monitor,
+            monitor.snapshot_outputs(),
+            self._format_output,
+            show_zero=True,
+        )
 
-        # 输入监控窗口：只显示有输入的通道
-        input_lines = []
-        for cap_id, value in inputs.items():
-            category = self._capability_category(cap_id)
+    def _render_monitor(self, widget, values, formatter, show_zero=False):
+        lines = []
 
-            if category == "button":
-                if value:
-                    input_lines.append(self._format_input(cap_id, value))
-            else:
-                if value:
-                    input_lines.append(self._format_input(cap_id, value))
+        for key, value in values.items():
+            category = self._capability_category(key)
 
-        if input_lines:
-            self.input_monitor.config(state=tk.NORMAL)
-            self.input_monitor.delete("1.0", tk.END)
-            self.input_monitor.insert(tk.END, "\n".join(input_lines))
-            self.input_monitor.config(state=tk.DISABLED)
+            # 按钮：按下才显示；轴/扳机：非零才显示
+            if value or show_zero:
+                lines.append(formatter(key, value))
 
-        # 输出监控窗口：只显示正在输出的通道
-        output_lines = []
-        for target, value in outputs.items():
-            category = self._capability_category(target)
+        widget.config(state=tk.NORMAL)
+        widget.delete("1.0", tk.END)
 
-            if category == "button":
-                if value:
-                    output_lines.append(self._format_output(target, value))
-            else:
-                if value:
-                    output_lines.append(self._format_output(target, value))
+        if lines:
+            widget.insert(tk.END, "\n".join(lines))
 
-        if output_lines:
-            self.output_monitor.config(state=tk.NORMAL)
-            self.output_monitor.delete("1.0", tk.END)
-            self.output_monitor.insert(tk.END, "\n".join(output_lines))
-            self.output_monitor.config(state=tk.DISABLED)
+        widget.config(state=tk.DISABLED)
 
     #
     # Log

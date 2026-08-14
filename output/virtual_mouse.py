@@ -18,6 +18,7 @@ class VirtualMouse(OutputDevice):
 
         self._mouse = None
         self._real = False
+        self._pressed = set()
 
         self._init_mouse()
 
@@ -29,7 +30,7 @@ class VirtualMouse(OutputDevice):
             self._real = True
             print("[Mouse] Virtual Mouse Ready")
         except Exception as e:
-            print("[Mouse] Mouse unavailable, using simulation:", e)
+            print("[Mouse] Mouse backend unavailable, using stub:", e)
 
     @property
     def real(self):
@@ -71,11 +72,20 @@ class VirtualMouse(OutputDevice):
 
         if bool(value):
             self._mouse.press(button)
+            self._pressed.add(button)
         else:
             self._mouse.release(button)
+            self._pressed.discard(button)
 
     def set_button(self, button, pressed):
         self.send(button, 1.0 if pressed else 0.0)
 
     def close(self):
-        pass
+        if not self._real:
+            return
+        for button in list(self._pressed):
+            try:
+                self._mouse.release(button)
+            except Exception:
+                pass
+        self._pressed.clear()

@@ -83,6 +83,7 @@ class FTMSDevice:
             await self.client.disconnect()
         except Exception:
             pass
+        self.client = None
 
     async def _find_device(self):
         if self.address:
@@ -160,9 +161,6 @@ class FTMSDevice:
 
     def close(self):
         self.running = False
-
-        if self.client:
-            try:
-                self.client.disconnect()
-            except Exception:
-                pass
+        if self.thread and self.thread is not threading.current_thread():
+            self.thread.join(timeout=2)
+        self.thread = None

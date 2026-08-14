@@ -24,6 +24,7 @@ class ANTDevice:
 
         self.running = False
         self.thread = None
+        self._node = None
 
     def connect(self):
         self.running = True
@@ -74,6 +75,7 @@ class ANTDevice:
 
             driver = USBDriver()
             node = Node(driver)
+            self._node = node
 
             self._attach_devices(node)
 
@@ -81,6 +83,8 @@ class ANTDevice:
             node.start()
         except Exception as e:
             print("[ANT] openant start failed:", e)
+        finally:
+            self._node = None
 
     def _attach_devices(self, node):
         if self.device_type in ("all", "fe_c"):
@@ -155,3 +159,14 @@ class ANTDevice:
 
     def close(self):
         self.running = False
+        node = self._node
+        if node is not None:
+            stop = getattr(node, "stop", None)
+            if callable(stop):
+                try:
+                    stop()
+                except Exception as e:
+                    print("[ANT] Stop failed:", e)
+        if self.thread and self.thread is not threading.current_thread():
+            self.thread.join(timeout=2)
+        self.thread = None

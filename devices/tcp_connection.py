@@ -16,6 +16,7 @@ class TcpConnection(LineConnection):
         self.host = host
         self.port = port
         self.sock = None
+        self._buffer = ""
 
     def open(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -38,9 +39,10 @@ class TcpConnection(LineConnection):
         if not data:
             return []
 
-        text = data.decode("utf-8", errors="replace")
-        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
-        return lines
+        self._buffer += data.decode("utf-8", errors="replace")
+        raw_lines = self._buffer.split("\n")
+        self._buffer = raw_lines.pop()
+        return [line.strip() for line in raw_lines if line.strip()]
 
     def close(self):
         self.running = False
@@ -48,3 +50,4 @@ class TcpConnection(LineConnection):
         if self.sock:
             self.sock.close()
             self.sock = None
+        self.join()

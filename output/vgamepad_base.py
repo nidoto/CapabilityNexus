@@ -48,7 +48,7 @@ class VGamepadDevice(OutputDevice):
             self._real = True
             print(f"[{type(self).__name__}] Virtual gamepad Created")
         except Exception as e:
-            print(f"[{type(self).__name__}] Real gamepad unavailable, using simulation:", e)
+            print(f"[{type(self).__name__}] XInput-compatible backend unavailable, using stub:", e)
 
     @property
     def real(self):

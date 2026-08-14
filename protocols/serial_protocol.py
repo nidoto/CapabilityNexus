@@ -3,6 +3,14 @@ from core.stream import StreamData
 
 class SerialParser:
 
+    DEFAULT_ALIASES = {
+        # ESP32 sends final XInput-compatible values. The client forwards
+        # these values without applying an angle processor.
+        "x": "control.right_x",
+        "y": "control.right_y",
+        "z": "control.right_z",
+    }
+
     def __init__(self, event_bus, mapping=None, has_frame=False, frame_prefix="FRAME="):
         self.event_bus = event_bus
         self.mapping = mapping or {}
@@ -18,6 +26,12 @@ class SerialParser:
         if not line:
             return
 
+        # Frame counters are transport metadata, not input capabilities.
+        if line.startswith(self.frame_prefix):
+            if self.has_frame:
+                self._on_frame(line)
+            return
+
         if self.has_frame:
             if line.startswith(self.frame_prefix):
                 self._on_frame(line)
@@ -31,7 +45,8 @@ class SerialParser:
 
         key, value = line.split("=", 1)
 
-        if key not in self.mapping:
+        normalized_key = key.strip().lower()
+        if self.mapping and key not in self.mapping and normalized_key not in self.mapping:
             return
 
         try:
@@ -39,8 +54,15 @@ class SerialParser:
         except ValueError:
             return
 
+        capability = self.mapping.get(
+            key,
+            self.mapping.get(
+                normalized_key,
+                self.DEFAULT_ALIASES.get(normalized_key, normalized_key),
+            ),
+        )
         stream = StreamData(
-            id=self.mapping[key],
+            id=capability,
             value=value
         )
 

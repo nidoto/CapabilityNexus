@@ -16,6 +16,7 @@ class BluetoothConnection(LineConnection):
         self.baudrate = baudrate
         self.stream = None
         self.port = None
+        self._buffer = ""
 
     def open(self):
         if self.device and self.device.upper().startswith("COM"):
@@ -53,9 +54,10 @@ class BluetoothConnection(LineConnection):
         if not data:
             return []
 
-        text = data.decode("utf-8", errors="replace")
-        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
-        return lines
+        self._buffer += data.decode("utf-8", errors="replace")
+        raw_lines = self._buffer.split("\n")
+        self._buffer = raw_lines.pop()
+        return [line.strip() for line in raw_lines if line.strip()]
 
     def close(self):
         self.running = False
@@ -66,3 +68,4 @@ class BluetoothConnection(LineConnection):
             except Exception:
                 pass
             self.stream = None
+        self.join()

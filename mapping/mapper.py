@@ -1,6 +1,7 @@
 from core.processed_channel import ProcessedChannel
 from core.system_event import OutputEvent
 import json
+import threading
 
 
 class MappingEngine:
@@ -13,6 +14,7 @@ class MappingEngine:
 
         # target -> {source: value} 用于多对一合并
         self._target_sources = {}
+        self._lock = threading.RLock()
 
         event_bus.subscribe(
             ProcessedChannel,
@@ -23,28 +25,34 @@ class MappingEngine:
         if isinstance(targets, dict):
             targets = [targets]
 
-        self.mapping[source] = targets
+        with self._lock:
+            self.mapping[source] = targets
 
-        for t in targets:
-            target = t.get("target")
-            if target not in self._target_sources:
-                self._target_sources[target] = {}
-            self._target_sources[target][source] = None
+            for t in targets:
+                target = t.get("target")
+                if target not in self._target_sources:
+                    self._target_sources[target] = {}
+                self._target_sources[target][source] = None
 
     def load_profile(self, path):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        mappings = data.get("mappings", {})
+        self.load_mappings(data.get("mappings", {}))
 
-        for source, mapping in mappings.items():
-            targets = self._normalize(mapping)
+    def load_mappings(self, mappings):
+        """Replace mappings at runtime and rebuild target fan-in state."""
+        with self._lock:
+            self.mapping.clear()
+            self._target_sources.clear()
 
-            self.add_mapping(source, targets)
+            for source, mapping in (mappings or {}).items():
+                targets = self._normalize(mapping)
+                self.add_mapping(source, targets)
 
-            print("[Profile]", source, "->", [
-                t["target"] for t in targets
-            ])
+                print("[Profile]", source, "->", [
+                    t["target"] for t in targets
+                ])
 
     @staticmethod
     def _normalize(mapping):
@@ -78,26 +86,17 @@ class MappingEngine:
         return []
 
     def receive(self, channel):
-        if channel.id not in self.mapping:
-            return
+        with self._lock:
+            configs = list(self.mapping.get(channel.id, []))
+            events = []
+            for config in configs:
+                target = config["target"]
+                value = channel.value * config["gain"]
+                self._target_sources[target][channel.id] = value
+                events.append((target, value, config["gain"]))
 
-        configs = self.mapping[channel.id]
-
-        for config in configs:
-            target = config["target"]
-            value = channel.value * config["gain"]
-
-            # 记录该 source 对 target 的最近值
-            self._target_sources[target][channel.id] = value
-
-            sources = self._target_sources[target]
-
-            if len(sources) == 1:
-                # 一对多 / 一对一：直接发布
-                self._publish(channel.id, target, value, config["gain"])
-            else:
-                # 多对一：最后更新的 source 生效
-                self._publish(channel.id, target, value, config["gain"])
+        for target, value, gain in events:
+            self._publish(channel.id, target, value, gain)
 
     def _publish(self, source, target, value, gain):
         event = OutputEvent(

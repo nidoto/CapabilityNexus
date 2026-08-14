@@ -16,6 +16,7 @@ class VirtualKeyboard(OutputDevice):
 
         self._keyboard = None
         self._real = False
+        self._pressed = {}
 
         self._init_keyboard()
 
@@ -27,7 +28,7 @@ class VirtualKeyboard(OutputDevice):
             self._real = True
             print("[Keyboard] Virtual Keyboard Ready")
         except Exception as e:
-            print("[Keyboard] Keyboard unavailable, using simulation:", e)
+            print("[Keyboard] Keyboard backend unavailable, using stub:", e)
 
     @property
     def real(self):
@@ -51,8 +52,10 @@ class VirtualKeyboard(OutputDevice):
 
             if pressed:
                 self._keyboard.press(key)
+                self._pressed[key_name] = key
             else:
                 self._keyboard.release(key)
+                self._pressed.pop(key_name, None)
 
             print(f"[Keyboard] {target} = {pressed}")
         except Exception as e:
@@ -100,4 +103,11 @@ class VirtualKeyboard(OutputDevice):
         self.send(button, 1.0 if pressed else 0.0)
 
     def close(self):
-        pass
+        if not self._real:
+            return
+        for key in list(self._pressed.values()):
+            try:
+                self._keyboard.release(key)
+            except Exception:
+                pass
+        self._pressed.clear()

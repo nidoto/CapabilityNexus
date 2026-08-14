@@ -13,12 +13,17 @@ class DeviceManager:
 
         self.detector = DeviceDetector()
         self.library = DeviceLibrary(
-            cache_path=os.path.join("config", "device_library_cache.json")
+            cache_path=os.path.join(
+                os.path.dirname(os.path.abspath(self.config_path)),
+                "device_library_cache.json",
+            )
         )
 
         self.devices = []
         self._config = []
         self._connected = []
+        self._connected_entries = []
+        self._detected_xinput_indices = []
 
     def load_config(self):
         if not os.path.exists(self.config_path):
@@ -29,7 +34,8 @@ class DeviceManager:
         with open(self.config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        self._config = data.get("devices", [])
+        devices = data.get("devices", [])
+        self._config = devices if isinstance(devices, list) else []
         print("[DeviceManager] Loaded config devices:", len(self._config))
 
     def add_custom_device(self, device_config):
@@ -50,6 +56,9 @@ class DeviceManager:
         self.library.refresh()
 
         detected = self.detector.detect()
+        self._detected_xinput_indices = [
+            d["index"] for d in detected if d.get("type") == "xinput"
+        ]
         print("[DeviceManager] Detected devices:", len(detected))
 
         resolved = []
@@ -119,25 +128,148 @@ class DeviceManager:
 
         return resolved
 
+    def detected_xinput_indices(self):
+        """Return XInput slots found before virtual outputs were created."""
+        return list(self._detected_xinput_indices)
+
     def _match_config(self, detected):
         for entry in self._config:
             fp = detected.get("fingerprint", {})
 
             if fp.get("type") == "serial":
-                if fp.get("vid") == entry.get("vid") and fp.get("pid") == entry.get("pid"):
+                # 串口匹配：检测到的 vid/pid 必须存在且与 config 一致
+                detected_port = detected.get("port")
+                configured_connection = entry.get("connection", {})
+                configured_port = configured_connection.get("port", entry.get("port"))
+
+                if detected_port and configured_port:
+                    if detected_port.upper() == str(configured_port).upper():
+                        return entry
+
+                vid = fp.get("vid")
+                pid = fp.get("pid")
+
+                if not vid or not pid:
+                    continue
+
+                if vid == entry.get("vid") and pid == entry.get("pid"):
                     return entry
 
             if fp.get("type") == "xinput":
-                if entry.get("driver") == "xinput":
+                if (
+                    entry.get("driver") == "xinput"
+                    and entry.get("index", 0) == fp.get("index", 0)
+                ):
                     return entry
 
         return None
 
     def connect_all(self, parsed_resolved):
         for detected, entry, source in parsed_resolved:
+            self.connect_device(detected, entry)
+
+    def connect_device(self, detected, entry):
+        """Connect one detected device while the client is already running."""
+        for connected_entry in self._connected_entries:
+            if self._same_device(connected_entry, entry):
+                return self._connected[
+                    self._connected_entries.index(connected_entry)
+                ]
+
+        try:
             instance = self._build_device(detected, entry)
-            if instance:
-                self._connected.append(instance)
+        except Exception as error:
+            print("[DeviceManager] Connect failed:", error)
+            return None
+        if instance:
+            self._connected.append(instance)
+            self._connected_entries.append(entry)
+        return instance
+
+    def disconnect_device(self, entry):
+        """Close and forget one device while the engine is running."""
+        for index, connected_entry in enumerate(self._connected_entries):
+            if not self._same_device(connected_entry, entry):
+                continue
+
+            instance = self._connected.pop(index)
+            self._connected_entries.pop(index)
+            try:
+                instance.close()
+            except Exception as e:
+                print("[DeviceManager] Device close failed:", e)
+            return True
+
+        return False
+
+    @staticmethod
+    def _same_device(left, right):
+        if left.get("driver") != right.get("driver"):
+            return False
+
+        driver = left.get("driver")
+        if driver == "xinput":
+            return left.get("index", 0) == right.get("index", 0)
+        if driver == "serial":
+            left_connection = left.get("connection", {})
+            right_connection = right.get("connection", {})
+            return (
+                left_connection.get("port", left.get("port"))
+                == right_connection.get("port", right.get("port"))
+            )
+        if driver == "ftms":
+            return left.get("address") == right.get("address")
+
+        return left.get("name") == right.get("name")
+
+    def connected_devices(self):
+        """返回当前已连接设备的 config 条目列表（供 GUI 显示）"""
+        return list(self._connected_entries)
+
+    def online_devices(self):
+        """返回当前真正在线的设备 config 条目列表
+
+        区分于 connected_devices（已尝试连接的实例）：
+        online 只统计实例当前确实在线/打开的。
+        """
+        online = []
+
+        for instance, entry in zip(self._connected, self._connected_entries):
+            if self._is_online(instance):
+                online.append(entry)
+
+        return online
+
+    @staticmethod
+    def _is_online(instance):
+        """判断设备实例当前是否在线（各驱动属性不同，做兼容判断）"""
+        # 显式 real 属性（XInput/HID 等）
+        real = getattr(instance, "real", None)
+        if real is not None:
+            return bool(real)
+
+        # XInput 轮询线程的连接标志
+        connected = getattr(instance, "_connected", None)
+        if connected is not None:
+            return bool(connected)
+
+        # 串口：serial 句柄存在即在线
+        serial = getattr(instance, "serial", None)
+        if serial is not None:
+            return serial.is_open
+
+        # HID：joystick 存在即在线
+        joystick = getattr(instance, "joystick", None)
+        if joystick is not None:
+            return True
+
+        # FTMS：client 存在即在线
+        client = getattr(instance, "client", None)
+        if client is not None:
+            return True
+
+        # 无法判断时视为在线（保守）
+        return True
 
     def _build_device(self, detected, entry):
         driver = entry.get("driver")
@@ -147,7 +279,8 @@ class DeviceManager:
 
             index = entry.get("index", detected.get("index", 0))
             device = XInputDevice(self.event_bus, index=index)
-            device.connect()
+            if not device.connect():
+                return None
             return device
 
         if driver == "hid":
@@ -155,7 +288,8 @@ class DeviceManager:
 
             index = entry.get("index", 0)
             device = HIDDevice(self.event_bus, index=index)
-            device.connect()
+            if not device.connect():
+                return None
             return device
 
         if driver == "ftms":
@@ -216,3 +350,4 @@ class DeviceManager:
         for device in self._connected:
             device.close()
         self._connected = []
+        self._connected_entries = []

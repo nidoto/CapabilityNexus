@@ -10,7 +10,7 @@ class OutputDeviceInfo:
 OUTPUT_DEVICES = [
     OutputDeviceInfo(
         "virtual_x360",
-        "XInput-compatible Virtual Controller",
+        "XInput-compatible Controller",
         "Standard game controller protocol (XInput compatible)",
         {
             "left_x": "Left Stick X",
@@ -81,7 +81,7 @@ OUTPUT_DEVICES = [
     ),
     OutputDeviceInfo(
         "virtual_ds4",
-        "DualShock Protocol Virtual Controller",
+        "DualShock-compatible Controller",
         "Standard game controller protocol (DualShock 4 compatible)",
         {
             "ds4.left_x": "Left Stick X",

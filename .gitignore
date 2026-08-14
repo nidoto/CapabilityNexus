@@ -10,3 +10,4 @@ build/
 .DS_Store
 Thumbs.db
 config/device_library_cache.json
+config/request_library_cache.json

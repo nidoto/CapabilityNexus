@@ -462,7 +462,10 @@ def _make_library():
     from devices.device_library import DeviceLibrary
 
     return DeviceLibrary(
-        cache_path=os.path.join("config", "device_library_cache.json"),
+        cache_path=os.path.join(
+            os.path.dirname(config_io.CONFIG_PATH),
+            "device_library_cache.json",
+        ),
         library_url=LIBRARY_URL,
     )
 

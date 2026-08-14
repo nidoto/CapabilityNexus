@@ -36,7 +36,11 @@ class VirtualDS4(VGamepadDevice):
     }
 
     def _init_gamepad(self):
-        import vgamepad
+        try:
+            import vgamepad
+        except Exception as error:
+            print("[VirtualDS4] vgamepad unavailable:", error)
+            return
 
         self.GAMEPAD_CLASS = vgamepad.VDS4Gamepad
         self.BUTTONS_ENUM = vgamepad.DS4_BUTTONS

@@ -23,6 +23,7 @@ from devices.device_manager import DeviceManager
 class CapabilityNexusApp:
 
     def __init__(self):
+        self.project_root = os.path.dirname(os.path.abspath(__file__))
         self.event_bus = EventBus()
         self.registry = CapabilityRegistry()
 
@@ -30,22 +31,27 @@ class CapabilityNexusApp:
         self.status_monitor.start()
 
         self._build_pipeline()
-        self._build_outputs()
+        # Discover physical inputs before creating the virtual XInput output.
+        # Otherwise Windows reports our own virtual pad as a real controller.
         self._build_devices()
+        self._build_outputs()
+        self._closed = False
 
         print("CapabilityNexus Ready")
 
     def _build_pipeline(self):
         # 能力包
         self.package_manager = PackageManager(self.registry)
-        self.package_manager.load("packages")
+        self.package_manager.load(os.path.join(self.project_root, "packages"))
 
         # 数据适配
         self.adapter = StreamAdapter(self.registry)
 
         # 处理器
         self.processor_manager = ProcessorManager()
-        self.processor_manager.load("config/processors.json")
+        self.processor_manager.load(
+            os.path.join(self.project_root, "config", "processors.json")
+        )
 
         # UMI 解析器（控制台测试用）
         self.umi_parser = UMIParser(self.event_bus)
@@ -83,8 +89,9 @@ class CapabilityNexusApp:
         # Transform Layer（用户逻辑表）
         self.transform_layer = TransformLayer(self.event_bus)
 
-        if os.path.exists("config/transforms.json"):
-            self.transform_layer.load("config/transforms.json")
+        transforms_path = os.path.join(self.project_root, "config", "transforms.json")
+        if os.path.exists(transforms_path):
+            self.transform_layer.load(transforms_path)
 
         def transform_receive(processed):
             outputs = self.transform_layer.process(processed)
@@ -99,7 +106,9 @@ class CapabilityNexusApp:
 
         # Mapping
         self.mapping_engine = MappingEngine(self.event_bus)
-        self.mapping_engine.load_profile("profiles/default.json")
+        self.mapping_engine.load_profile(
+            os.path.join(self.project_root, "profiles", "default.json")
+        )
 
     def _build_outputs(self):
         # 输出设备（用户启用）
@@ -116,7 +125,8 @@ class CapabilityNexusApp:
         # 需求处理（游戏请求 -> 映射或提示）
         import json as _json
 
-        with open("profiles/default.json", "r", encoding="utf-8") as _f:
+        profile_path = os.path.join(self.project_root, "profiles", "default.json")
+        with open(profile_path, "r", encoding="utf-8") as _f:
             _profile_data = _json.load(_f)
 
         self.request_handler = RequestHandler(
@@ -133,12 +143,24 @@ class CapabilityNexusApp:
 
     def _build_devices(self):
         # 设备识别 + 连接
-        self.device_manager = DeviceManager(self.event_bus)
+        self.device_manager = DeviceManager(
+            self.event_bus,
+            config_path=os.path.join(self.project_root, "config", "devices.json"),
+        )
 
         resolved = self.device_manager.discover()
         self.device_manager.connect_all(resolved)
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
+
+        try:
+            self.status_monitor.stop()
+        except Exception:
+            pass
+
         try:
             self.device_manager.close_all()
         except Exception:
@@ -146,5 +168,10 @@ class CapabilityNexusApp:
 
         try:
             self.output_manager.close_all()
+        except Exception:
+            pass
+
+        try:
+            self.output_router.close()
         except Exception:
             pass

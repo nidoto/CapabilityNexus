@@ -13,7 +13,7 @@ class OutputRouter:
     # mouse_*          → 鼠标
     # ds4.*            → DualShock 兼容
     # xbox.*           → 真实 XInput 设备（震动等）
-    # 其他（摇杆/按钮） → XInput 兼容虚拟手柄
+    # 其他（摇杆/按钮） → XInput 兼容控制器
     #
 
     PREFIX_TYPES = {
@@ -33,7 +33,7 @@ class OutputRouter:
     def __init__(self, virtual_device=None, real_devices=None, event_bus=None,
                  managed_instances=None):
         self.event_bus = event_bus
-        self.virtual = virtual_device or VirtualXInput(0, event_bus=event_bus)
+        self.virtual = virtual_device
 
         # managed_instances: callable(id) -> instance（用户启用的输出设备）
         self.managed_instances = managed_instances or (lambda _id: None)
@@ -80,7 +80,13 @@ class OutputRouter:
 
             return self.devices[backend_type]
 
-        # 默认：XInput 兼容虚拟手柄
+        # 默认：XInput 兼容控制器
+        managed = self._find_managed("xinput")
+        if managed is not None:
+            return managed
+
+        if self.virtual is None:
+            self.virtual = VirtualXInput(0, event_bus=self.event_bus)
         return self.virtual
 
     def _find_managed(self, backend_type):
@@ -105,7 +111,8 @@ class OutputRouter:
         return None
 
     def close(self):
-        self.virtual.close()
+        if self.virtual is not None:
+            self.virtual.close()
 
         for backend in self.devices.values():
             backend.close()

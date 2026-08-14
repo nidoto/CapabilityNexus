@@ -11,9 +11,9 @@
  *
  * 输出格式 (UMI SerialParser 兼容):
  *   FRAME=1
- *   X=12.50
- *   Y=-3.20
- *   R=0.10
+ *   X=2048
+ *   Y=-1024
+ *   X/Y range: final signed XInput axis values (-32768 to 32767)
  *
  * 校准信号:
  *   长按按钮3秒 → 校准1秒 → 输出 "CALIBRATION_DONE"
@@ -44,6 +44,18 @@ sh2_SensorValue_t sensorValue;
 float yawOffset   = 0;
 float pitchOffset = 0;
 float rollOffset  = 0;
+
+// Keep signed angles stable across the -180/180 degree boundary.
+float wrapAngleDegrees(float angle) {
+  while (angle > 180.0f) angle -= 360.0f;
+  while (angle < -180.0f) angle += 360.0f;
+  return angle;
+}
+
+int16_t angleToAxis(float angle) {
+  angle = constrain(angle, -180.0f, 180.0f);
+  return (int16_t)lroundf((angle / 180.0f) * 32767.0f);
+}
 
 // ---------- 按钮状态 (老代码的简单逻辑) ----------
 bool lastButtonState = HIGH;      // 上次按钮状态 (HIGH=未按下)
@@ -225,10 +237,10 @@ void loop() {
         roll, pitch, yaw
       );
 
-      // 去偏移 + 弧度转角度
-      lastRoll  = (roll  - rollOffset)  * 57.2958f;
-      lastPitch = (pitch - pitchOffset) * 57.2958f;
-      lastYaw   = (yaw   - yawOffset)   * 57.2958f;
+       // Remove the calibration offset, convert to degrees, wrap, and clamp.
+       lastRoll  = constrain(wrapAngleDegrees((roll  - rollOffset)  * 57.2958f), -180.0f, 180.0f);
+       lastPitch = constrain(wrapAngleDegrees((pitch - pitchOffset) * 57.2958f), -180.0f, 180.0f);
+       lastYaw   = constrain(wrapAngleDegrees((yaw   - yawOffset)   * 57.2958f), -180.0f, 180.0f);
     }
   }
 
@@ -236,9 +248,10 @@ void loop() {
   frameCounter++;
 
   Serial.printf("FRAME=%lu\n", frameCounter);
-  Serial.printf("X=%.2f\n", lastYaw);
-  Serial.printf("Y=%.2f\n", lastPitch);
-  Serial.printf("R=%.2f\n", lastRoll);
+  // The firmware owns the sensor algorithm. The client only forwards these
+  // final controller-axis values to the virtual XInput device.
+  Serial.printf("X=%d\n", angleToAxis(lastYaw));
+  Serial.printf("Y=%d\n", angleToAxis(lastPitch));
 
   delay(10);
 }

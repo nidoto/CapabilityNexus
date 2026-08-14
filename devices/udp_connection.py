@@ -46,3 +46,4 @@ class UdpConnection(LineConnection):
         if self.sock:
             self.sock.close()
             self.sock = None
+        self.join()

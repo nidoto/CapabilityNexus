@@ -1,6 +1,36 @@
 {
     "capabilities": [
         {
+            "id": "control.right_x",
+            "category": "axis",
+            "value_type": "int16",
+            "range": [
+                -32768,
+                32767
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "control.right_y",
+            "category": "axis",
+            "value_type": "int16",
+            "range": [
+                -32768,
+                32767
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
             "id": "motion.pitch",
             "category": "axis",
             "value_type": "float",

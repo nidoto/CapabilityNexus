@@ -1,50 +1,85 @@
 import json
 import os
+import tempfile
 
 
-CONFIG_PATH = os.path.join("config", "devices.json")
-OUTPUTS_PATH = os.path.join("config", "outputs.json")
-PACKAGES_PATH = os.path.join("packages")
-PROFILE_PATH = os.path.join("profiles", "default.json")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "devices.json")
+OUTPUTS_PATH = os.path.join(PROJECT_ROOT, "config", "outputs.json")
+PACKAGES_PATH = os.path.join(PROJECT_ROOT, "packages")
+PROFILE_PATH = os.path.join(PROJECT_ROOT, "profiles", "default.json")
 
 
 def load_config():
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+    try:
+        if os.path.exists(CONFIG_PATH):
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return {"devices": []}
+            devices = data.get("devices", [])
+            data["devices"] = devices if isinstance(devices, list) else []
+            return data
+    except (OSError, json.JSONDecodeError) as error:
+        print("[Config] Failed to load devices:", error)
     return {"devices": []}
 
 
 def load_outputs():
-    if os.path.exists(OUTPUTS_PATH):
-        with open(OUTPUTS_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+    try:
+        if os.path.exists(OUTPUTS_PATH):
+            with open(OUTPUTS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return {"outputs": []}
+            outputs = data.get("outputs", [])
+            data["outputs"] = outputs if isinstance(outputs, list) else []
+            return data
+    except (OSError, json.JSONDecodeError) as error:
+        print("[Config] Failed to load outputs:", error)
     return {"outputs": []}
 
 
 def save_outputs(data):
-    os.makedirs(os.path.dirname(OUTPUTS_PATH), exist_ok=True)
-    with open(OUTPUTS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    _save_json(OUTPUTS_PATH, data)
 
 
 def save_config(data):
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    _save_json(CONFIG_PATH, data)
 
 
 def load_profile():
-    if os.path.exists(PROFILE_PATH):
-        with open(PROFILE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+    try:
+        if os.path.exists(PROFILE_PATH):
+            with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return {"mappings": {}}
+            mappings = data.get("mappings", {})
+            data["mappings"] = mappings if isinstance(mappings, dict) else {}
+            return data
+    except (OSError, json.JSONDecodeError) as error:
+        print("[Config] Failed to load profile:", error)
     return {"mappings": {}}
 
 
 def save_profile(data):
-    os.makedirs(os.path.dirname(PROFILE_PATH), exist_ok=True)
-    with open(PROFILE_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    _save_json(PROFILE_PATH, data)
+
+
+def _save_json(path, data):
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=".cnx-", suffix=".tmp", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
 def list_package_capabilities():

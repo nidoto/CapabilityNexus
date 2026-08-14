@@ -42,7 +42,11 @@ class VirtualXInput(VGamepadDevice):
         super().__init__(device_id)
 
     def _init_gamepad(self):
-        import vgamepad
+        try:
+            import vgamepad
+        except Exception as error:
+            print("[VirtualXInput] vgamepad unavailable:", error)
+            return
 
         self.GAMEPAD_CLASS = vgamepad.VX360Gamepad
         self.BUTTONS_ENUM = vgamepad.XUSB_BUTTON

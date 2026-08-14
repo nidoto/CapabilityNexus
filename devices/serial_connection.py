@@ -39,3 +39,4 @@ class SerialConnection(LineConnection):
         if self.serial:
             self.serial.close()
             self.serial = None
+        self.join()

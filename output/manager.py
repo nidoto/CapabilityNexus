@@ -34,7 +34,8 @@ class OutputDeviceManager:
         with open(self.config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        self.outputs = data.get("outputs", [])
+        outputs = data.get("outputs", [])
+        self.outputs = outputs if isinstance(outputs, list) else []
         return self.outputs
 
     def save(self):
@@ -76,22 +77,55 @@ class OutputDeviceManager:
             module = importlib.import_module(module_name)
             cls = getattr(module, class_name)
 
-            instance = cls()
+            if config.get("type") == "xinput":
+                instance = cls(event_bus=self.event_bus)
+            else:
+                instance = cls()
             return instance
         except Exception as e:
             print("[OutputManager] Instantiate failed:", config.get("id"), e)
             return None
 
     def build_all(self):
-        self._instances = {}
+        self.close_all()
+        instances = {}
 
         for config in self.outputs:
             instance = self.instantiate(config)
 
             if instance:
-                self._instances[config["id"]] = instance
+                output_id = config.get("id")
+                if output_id in instances:
+                    try:
+                        instance.close()
+                    except Exception:
+                        pass
+                    print("[OutputManager] Duplicate output id:", output_id)
+                    continue
+                instances[output_id] = instance
+
+        self._instances = instances
 
         return self._instances
+
+    def add_runtime(self, config):
+        output_id = config.get("id")
+        if not output_id or output_id in self._instances:
+            return self._instances.get(output_id)
+        instance = self.instantiate(config)
+        if instance:
+            self._instances[output_id] = instance
+        return instance
+
+    def remove_runtime(self, output_id):
+        instance = self._instances.pop(output_id, None)
+        if instance is None:
+            return False
+        try:
+            instance.close()
+        except Exception as error:
+            print("[OutputManager] Output close failed:", error)
+        return True
 
     def get_instances(self):
         return self._instances

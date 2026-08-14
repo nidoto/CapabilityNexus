@@ -1,5 +1,7 @@
 {
     "mappings": {
+        "control.right_x": "right_x",
+        "control.right_y": "right_y",
         "motion.pitch": [
             {
                 "target": "right_x",
