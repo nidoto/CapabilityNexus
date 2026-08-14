@@ -169,6 +169,15 @@ boundaries and product documentation.
     ~0.5s after engine start
   - WebSocketServerConnection.open() now waits for the async server to be
     actually listening before returning
+- Services panel in the main GUI bottom bar (log left, services right)
+  - `tools/services.py`: WebService manages the phone WebSocket server
+    independently of the engine (start/stop, local IP list, page URLs)
+  - Bottom bar shows log on the left and a unified Services/Drivers panel on
+    the right: Web Phone Service + ViGEmBus + HidHide, each as
+    "name: status" with a Start/Stop (or Install/Uninstall) toggle
+  - Phone data from the standalone Web service flows into the running engine
+    via PhoneFrameParser; engine can start after the service
+  - WebService instance survives GUI rebuilds; stopped on app exit
 
 ## ESP32 Boundary
 

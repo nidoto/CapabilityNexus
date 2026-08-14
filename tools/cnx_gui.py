@@ -112,7 +112,20 @@ class CapabilityNexusGUI:
         self._refresh_live_values()
         self._render_request_tree()
         self._render_request_monitor()
+
+        # 服务面板低频刷新（驱动 sc query 较重，约每 2 秒）
+        self._services_tick_counter = getattr(self, "_services_tick_counter", 0) + 1
+        if self._services_tick_counter % 10 == 0:
+            self._services_tick_refresh()
+
         self._monitor_job = self.root.after(200, self._monitor_tick)
+
+    def _services_tick_refresh(self):
+        """定时刷新服务面板状态（不频繁）。"""
+        if hasattr(self, "_refresh_web"):
+            self._refresh_web()
+        if hasattr(self, "_refresh_drivers"):
+            self._refresh_drivers()
 
     def t(self, key):
         return self.i18n.t(key)
@@ -139,6 +152,7 @@ class CapabilityNexusGUI:
 
         settings_menu = tk.Menu(menubar, tearoff=0)
         settings_menu.add_command(label=self.t("menu_preferences"), command=self.show_preferences)
+        settings_menu.add_command(label=self.t("menu_services"), command=self.show_services)
         settings_menu.add_command(label=self.t("menu_drivers"), command=self.show_drivers)
         settings_menu.add_command(label=self.t("menu_hidhide"), command=self.show_hidhide)
         settings_menu.add_separator()
@@ -1046,11 +1060,167 @@ class CapabilityNexusGUI:
         self.log(f"Removed output: {device.get('name', device.get('id'))}")
 
     def _build_log_panel(self, parent):
-        logbox = ttk.LabelFrame(parent, text=self.t("panel_log"))
-        logbox.pack(fill=tk.X, padx=12, pady=(0, 10))
+        bottom = ttk.Frame(parent)
+        bottom.pack(fill=tk.X, padx=12, pady=(0, 10))
+
+        bottom.columnconfigure(0, weight=3)
+        bottom.columnconfigure(1, weight=2)
+
+        # 左侧：日志
+        logbox = ttk.LabelFrame(bottom, text=self.t("panel_log"))
+        logbox.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
 
         self.log_text = tk.Text(logbox, height=5, state=tk.DISABLED, bg="#0f172a", fg="#94a3b8", relief=tk.FLAT, padx=8, pady=5, font=("Consolas", 9))
-        self.log_text.pack(fill=tk.X, padx=6, pady=6)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+
+        # 右侧：服务功能区（驱动 / Web 服务统一管理）
+        services_box = ttk.LabelFrame(bottom, text=self.t("services_panel"))
+        services_box.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+
+        self._build_services_panel(services_box)
+
+    def _build_services_panel(self, parent):
+        """服务功能区：驱动 + Web 服务，统一 名称:状态 + 启用/停用。"""
+        from tools import services
+        from tools import drivers
+
+        rows = ttk.Frame(parent)
+        rows.pack(fill=tk.X, padx=6, pady=6)
+
+        # ---- 服务项行 ----
+        def make_service_row(container, label, row):
+            frame = ttk.Frame(container)
+            frame.grid(row=row, column=0, sticky="ew", pady=2)
+            frame.columnconfigure(1, weight=1)
+            ttk.Label(frame, text=label, font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky=tk.W)
+            status_label = ttk.Label(frame, text="...", width=14)
+            status_label.grid(row=0, column=1, sticky=tk.W, padx=6)
+            toggle_btn = ttk.Button(frame, text="...", width=10)
+            toggle_btn.grid(row=0, column=2, padx=2)
+            return frame, status_label, toggle_btn
+
+        # Web 服务（手机）—— 实例跨重建复用，保持运行状态
+        if not hasattr(self, "_web_service") or self._web_service is None:
+            self._web_service = services.WebService(port=8765, callback=self._phone_data_callback)
+        web_frame, web_status, web_toggle = make_service_row(rows, self.t("svc_web"), 0)
+        self._web_status_label = web_status
+        self._web_toggle_btn = web_toggle
+
+        # IP 提示
+        ip_var = tk.StringVar(value="")
+        ttk.Label(rows, textvariable=ip_var, foreground="#94a3b8", font=("Consolas", 8)).grid(
+            row=1, column=0, sticky=tk.W, padx=(2, 0)
+        )
+        self._web_ip_var = ip_var
+
+        def refresh_web():
+            info = self._web_service.info()
+            running = info["running"]
+            self._web_status_label.configure(text=self.t("svc_running") if running else self.t("svc_stopped"))
+            self._web_toggle_btn.configure(
+                text=self.t("svc_stop") if running else self.t("svc_start"),
+                command=lambda: toggle_web(),
+            )
+            if running:
+                urls = "  ".join(info["page_urls"])
+                self._web_ip_var.set(urls)
+            else:
+                self._web_ip_var.set("")
+
+        def toggle_web():
+            if self._web_service.is_running():
+                ok, msg = self._web_service.stop()
+                if ok:
+                    self.log("Web service stopped.")
+                else:
+                    self.log(f"Web stop failed: {msg}")
+            else:
+                ok, msg = self._web_service.start()
+                if ok:
+                    self.log(f"Web service started: port {self._web_service.port}")
+                else:
+                    self.log(f"Web start failed: {msg}")
+                    messagebox.showwarning(self.t("menu_services"), msg)
+            refresh_web()
+
+        self._web_toggle_btn.configure(command=toggle_web)
+
+        # 分隔
+        ttk.Separator(rows, orient=tk.HORIZONTAL).grid(row=2, column=0, sticky="ew", pady=6)
+
+        # ViGEmBus 驱动
+        vg_frame, vg_status, vg_toggle = make_service_row(rows, "ViGEmBus", 3)
+        self._vg_status_label = vg_status
+        self._vg_toggle_btn = vg_toggle
+
+        # HidHide 驱动
+        hh_frame, hh_status, hh_toggle = make_service_row(rows, "HidHide", 4)
+        self._hh_status_label = hh_status
+        self._hh_toggle_btn = hh_toggle
+
+        def refresh_drivers():
+            vg = drivers.check_vigembus()
+            hh = drivers.check_hidhide()
+
+            self._vg_status_label.configure(text=self.t("svc_installed") if vg else self.t("svc_missing"))
+            self._vg_toggle_btn.configure(
+                text=self.t("svc_uninstall") if vg else self.t("svc_install"),
+                command=lambda: toggle_vigembus(),
+            )
+
+            self._hh_status_label.configure(text=self.t("svc_installed") if hh else self.t("svc_missing"))
+            self._hh_toggle_btn.configure(
+                text=self.t("svc_uninstall") if hh else self.t("svc_install"),
+                command=lambda: toggle_hidhide(),
+            )
+
+        def toggle_vigembus():
+            if drivers.check_vigembus():
+                if messagebox.askyesno(self.t("menu_services"), self.t("drivers_vg_uninstall_ask")):
+                    drivers.uninstall_vigembus()
+                    self.log("ViGEmBus uninstall requested.")
+            else:
+                drivers_dir = drivers._find_bundled_drivers_dir()
+                ok, msg = drivers.install_vigembus(drivers_dir)
+                self.log(f"ViGEmBus install: {'OK' if ok else msg}")
+            refresh_drivers()
+
+        def toggle_hidhide():
+            if drivers.check_hidhide():
+                if messagebox.askyesno(self.t("menu_services"), self.t("drivers_hh_uninstall_ask")):
+                    drivers.uninstall_hidhide()
+                    self.log("HidHide uninstall requested.")
+            else:
+                drivers_dir = drivers._find_bundled_drivers_dir()
+                ok, msg = drivers.install_hidhide(drivers_dir)
+                self.log(f"HidHide install: {'OK' if ok else msg}")
+            refresh_drivers()
+
+        # 刷新按钮
+        refresh_btn = ttk.Button(rows, text=self.t("svc_refresh"), command=lambda: (refresh_web(), refresh_drivers()))
+        refresh_btn.grid(row=5, column=0, sticky=tk.E, pady=(4, 0))
+
+        # 保存引用供定时刷新
+        self._refresh_web = refresh_web
+        self._refresh_drivers = refresh_drivers
+        refresh_web()
+        refresh_drivers()
+
+    def _phone_data_callback(self, message):
+        """Web 服务收到的手机数据：解析并发布到引擎的 event_bus。
+
+        引擎未运行时丢弃（用户可先开 Web 服务，再启动引擎）。
+        """
+        if self.app is None or not hasattr(self.app, "event_bus"):
+            return
+
+        from devices.websocket_connection import PhoneFrameParser
+
+        try:
+            parser = PhoneFrameParser(self.app.event_bus)
+            parser.parse(message)
+        except Exception as error:
+            print("[PhoneData] parse failed:", error)
 
     #
     # Device tree
@@ -3131,7 +3301,19 @@ class CapabilityNexusGUI:
 
 def main():
     root = tk.Tk()
-    CapabilityNexusGUI(root)
+    gui = CapabilityNexusGUI(root)
+
+    def on_close():
+        try:
+            if hasattr(gui, "_web_service") and gui._web_service is not None:
+                gui._web_service.close()
+            if hasattr(gui, "app") and gui.app is not None:
+                gui.app.close()
+        except Exception:
+            pass
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
     root.mainloop()
 
 
