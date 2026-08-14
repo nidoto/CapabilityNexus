@@ -195,6 +195,9 @@ class CapabilityNexusGUI:
         self.output_tree.column("func", width=120)
         self.output_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
+        self.output_tree.bind("<Double-1>", self._on_output_tree_double_click)
+        self.output_tree.bind("<Return>", self._on_output_tree_double_click)
+
         btns = ttk.Frame(box)
         btns.pack(fill=tk.X, padx=6, pady=4)
         ttk.Button(btns, text=self.t("btn_add_output"), command=self.add_output_dialog).pack(side=tk.LEFT, padx=2)
@@ -449,6 +452,20 @@ class CapabilityNexusGUI:
             source = item.get("text")
             self._open_map_dialog(source)
 
+    def _on_output_tree_double_click(self, event):
+        selection = self.output_tree.selection()
+
+        if not selection:
+            return
+
+        item = self.output_tree.item(selection[0])
+        values = item.get("values", [])
+
+        if values and values[0] == "output_function":
+            text = item.get("text")
+            target = text.split("  (")[0]
+            self._open_reverse_map_dialog(target)
+
     #
     # Mapping
     #
@@ -646,6 +663,97 @@ class CapabilityNexusGUI:
             variable=append_var,
         ).pack(side=tk.LEFT)
         ttk.Button(btn_frame, text=self.t("dlg_apply"), command=apply).pack(side=tk.RIGHT)
+
+    def _open_reverse_map_dialog(self, target):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Map to output: {target}")
+        dialog.geometry("460x420")
+
+        ttk.Label(
+            dialog,
+            text=f"Which input should drive:  {target}?",
+        ).pack(padx=8, pady=8)
+
+        profile = config_io.load_profile()
+        mappings = profile.get("mappings", {})
+
+        current_source = None
+        for src, mapping in mappings.items():
+            m = mapping if isinstance(mapping, list) else [mapping]
+            for item in m:
+                tgt = item if isinstance(item, str) else item.get("target")
+                if tgt == target:
+                    current_source = src
+                    break
+
+        if current_source:
+            ttk.Label(
+                dialog,
+                text=f"Currently: {current_source} -> {target}",
+                foreground="#2e7d32",
+            ).pack(padx=8)
+
+        ttk.Label(dialog, text="Available inputs:").pack(padx=8, pady=(10, 2))
+
+        list_frame = ttk.Frame(dialog)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        input_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set)
+        input_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=input_list.yview)
+
+        packages = config_io.list_package_capabilities()
+        inputs = []
+
+        for pkg, info in packages.items():
+            for cap in info["capabilities"]:
+                inputs.append(cap)
+                input_list.insert(tk.END, f"{cap}  ({pkg})")
+
+        input_list.insert(tk.END, "(unmap / no mapping)")
+        inputs.append(None)
+
+        def apply():
+            index = input_list.curselection()
+
+            if not index:
+                return
+
+            source = inputs[index[0]]
+            profile = config_io.load_profile()
+            mappings = profile.get("mappings", {})
+
+            # 移除其他指向此 target 的映射
+            for src in list(mappings.keys()):
+                m = mappings[src] if isinstance(mappings[src], list) else [mappings[src]]
+                filtered = [i for i in m if not (i if isinstance(i, str) else i.get("target")) == target]
+                if not filtered:
+                    del mappings[src]
+                else:
+                    mappings[src] = filtered if isinstance(mappings[src], list) else filtered[0]
+
+            if source is not None:
+                new_mapping = {"target": target, "gain": 1.0, "return_to_center": False}
+                existing = mappings.get(source)
+
+                if isinstance(existing, list):
+                    mappings[source] = existing + [new_mapping]
+                elif isinstance(existing, dict):
+                    mappings[source] = [existing, new_mapping]
+                else:
+                    mappings[source] = [new_mapping]
+
+            profile["mappings"] = mappings
+            config_io.save_profile(profile)
+
+            self.refresh_mappings()
+            self.log(f"Mapped {source} -> {target}" if source else f"Unmapped {target}")
+            dialog.destroy()
+
+        ttk.Button(dialog, text=self.t("dlg_apply"), command=apply).pack(padx=8, pady=8)
 
     def remove_mapping(self):
         profile = config_io.load_profile()
