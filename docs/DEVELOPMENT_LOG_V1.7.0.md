@@ -116,6 +116,13 @@ boundaries and product documentation.
     test a single subsystem
   - Engine-pipeline portion verified (virtual output + event publishing);
     hardware portions require the ESP32 on COM3 and a connected controller
+- Hardware-in-the-loop verification (real ESP32 + Xbox controller)
+  - `tools/hil_test.py`: 9/9 passed with the ESP32 on COM3 and a connected
+    controller (XInput detection/state, ESP32 FRAME/X/Y stream, engine
+    pipeline)
+  - Live chain verified: ESP32 gyro -> control.right_x/y -> curve processor
+    (step bands) -> virtual XInput-compatible controller, with correct
+    horizontal/vertical response and 1.5 deg deadzone filtering
 
 ## ESP32 Boundary
 
@@ -134,7 +141,6 @@ axis values. The open client forwards final control values.
 
 ## Remaining Work
 
-- Add hardware-in-the-loop tests (requires ESP32 + controller on the bench)
 - Test multiple games and controller selection behavior
 - Consider code signing for the frozen executable
 - Create a setup wizard / bundler that installs Python, drivers and the app
