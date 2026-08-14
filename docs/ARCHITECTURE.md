@@ -1,4 +1,4 @@
-CapabilityNexus V1.3.0 系统架构说明
+CapabilityNexus V1.4.0 系统架构说明
 1. 项目定位
 
 CapabilityNexus 是一个通用现实输入能力转换框架。
@@ -75,15 +75,19 @@ ESP32 / Xbox One / USB / Serial / Bluetooth / WiFi
               |
               |
               v
-        Mapping Engine
+        Transform Layer      ← 用户逻辑表（hold/tap/invert）
               |
               |
               v
-         Output Event
+         Mapping Engine
               |
               |
               v
-         Output Router
+          Output Event
+              |
+              |
+              v
+          Output Router
               |
       ┌───────┬───────┬───────┐
       v       v       v       v
@@ -167,6 +171,12 @@ devices/device_library.py
 product（成品设备）→ 自动装配
 template（开发板模板）→ 提示用户自定义能力
 未知设备 → 提示手动添加
+
+完整支持：
+
+search(query) - 按名称/ID 搜索
+install(id) - 下载能力包到 packages/
+identify(device) - 指纹匹配
 5.3 DeviceManager
 
 devices/device_manager.py
@@ -264,6 +274,26 @@ target（目标功能）
 gain（增益）
 return_to_center（回中策略）
 
+一对多：
+
+一个输入 → 多个输出
+
+"mappings": {
+
+  "motion.pitch": [
+
+    { "target": "right_x", "gain": 1.0 },
+
+    { "target": "key_w", "gain": 0.5 }
+
+  ]
+
+}
+
+多对一：
+
+多个输入 → 同一输出（最后更新优先）
+
 一键全路由：
 
 mapping/auto_route.py（AutoRouter）
@@ -272,6 +302,31 @@ mapping/auto_route.py（AutoRouter）
 
 xbox.left_x -> left_x
 xbox.a      -> button_a
+11.1 Transform Layer
+
+mapping/transform.py
+
+位置：
+
+ProcessedChannel → [TransformLayer] → MappingEngine
+
+作用：
+
+用户在映射前插入逻辑变换。
+
+内置变换：
+
+hold  - 按住 source，输出 target 持续
+tap   - source 按下瞬间，输出 target 脉冲一次
+invert - 反转值（1 <-> 0）
+
+配置：
+
+config/transforms.json
+
+防循环：
+
+变换输出带 transformed 标记。
 12. Output 系统
 
 output/
@@ -411,8 +466,9 @@ V1.3.0 已完成：
 10. 连接方式可插拔，主流内建 + 用户自定义。
 19. 下一阶段
 
-V1.4.0：
+V1.5.0：
 
-映射表重构（一对多/多对一）
-Transform Layer 用户逻辑表
-设备库完整支持
+更多输出设备（DS4/方向盘/飞行摇杆）
+ANT+ 骑行台
+高级逻辑表
+GUI 增强
