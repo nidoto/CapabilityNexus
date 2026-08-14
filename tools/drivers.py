@@ -152,19 +152,21 @@ def check_hidhide():
 
 
 def _service_exists(names):
-    for name in names:
-        try:
-            result = subprocess.run(
-                ["sc.exe", "query", name],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=3,
-            )
-            if result.returncode == 0:
-                return True
-        except (OSError, subprocess.SubprocessError):
-            pass
+    """通过注册表 Services 键检测驱动服务（不依赖 sc.exe）。"""
+    try:
+        import winreg
+
+        for name in names:
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    rf"SYSTEM\CurrentControlSet\Services\{name}",
+                ):
+                    return True
+            except (FileNotFoundError, OSError):
+                continue
+    except ImportError:
+        pass
     return False
 
 

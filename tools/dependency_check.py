@@ -17,8 +17,10 @@ def check_dependencies():
 
     return {
         "vgamepad": importlib.util.find_spec("vgamepad") is not None,
-        "vigembus": _service_exists(("ViGEmBus", "NefariusVirtualGamepadEmulationBus")),
-        "hidhide": _service_exists(("HidHide",)) or _hidhide_registry_exists(),
+        "vigembus": _service_exists_registry(
+            ("ViGEmBus", "NefariusVirtualGamepadEmulationBus")
+        ),
+        "hidhide": _service_exists_registry(("HidHide",)) or _hidhide_registry_exists(),
         "platform": sys.platform,
     }
 
@@ -34,20 +36,28 @@ def missing_dependencies(status):
     return missing
 
 
-def _service_exists(names):
-    for name in names:
-        try:
-            result = subprocess.run(
-                ["sc.exe", "query", name],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=3,
-            )
-            if result.returncode == 0:
-                return True
-        except (OSError, subprocess.SubprocessError):
-            pass
+def _service_exists_registry(names):
+    """通过注册表 Services 键检测驱动服务（不依赖 sc.exe，exe 环境更可靠）。"""
+    try:
+        import winreg
+
+        for name in names:
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"SYSTEM\CurrentControlSet\Services",
+                ):
+                    with winreg.OpenKey(
+                        winreg.HKEY_LOCAL_MACHINE,
+                        rf"SYSTEM\CurrentControlSet\Services\{name}",
+                    ):
+                        return True
+            except FileNotFoundError:
+                continue
+            except OSError:
+                continue
+    except ImportError:
+        pass
     return False
 
 
