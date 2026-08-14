@@ -1526,7 +1526,7 @@ class CapabilityNexusGUI:
         category = self._capability_category(cap_id)
 
         if category == "button":
-            return f"{cap_id}: 按下" if value else f"{cap_id}: 释放"
+            return f"{cap_id}: pressed" if value else f"{cap_id}: released"
 
         return f"{cap_id}: {value:.2f}"
 
@@ -1534,7 +1534,7 @@ class CapabilityNexusGUI:
         category = self._capability_category(target)
 
         if category == "button":
-            return f"{target}: 按下" if value else f"{target}: 释放"
+            return f"{target}: pressed" if value else f"{target}: released"
 
         return f"{target}: {value:.2f}"
 
@@ -1547,14 +1547,17 @@ class CapabilityNexusGUI:
         inputs = monitor.snapshot_inputs()
         outputs = monitor.snapshot_outputs()
 
-        # 输入监控窗口
+        # 输入监控窗口：只显示有输入的通道
         input_lines = []
         for cap_id, value in inputs.items():
-            if "button" in self._capability_category(cap_id):
+            category = self._capability_category(cap_id)
+
+            if category == "button":
                 if value:
                     input_lines.append(self._format_input(cap_id, value))
             else:
-                input_lines.append(self._format_input(cap_id, value))
+                if value:
+                    input_lines.append(self._format_input(cap_id, value))
 
         if input_lines:
             self.input_monitor.config(state=tk.NORMAL)
@@ -1562,14 +1565,17 @@ class CapabilityNexusGUI:
             self.input_monitor.insert(tk.END, "\n".join(input_lines))
             self.input_monitor.config(state=tk.DISABLED)
 
-        # 输出监控窗口
+        # 输出监控窗口：只显示正在输出的通道
         output_lines = []
         for target, value in outputs.items():
-            if "button" in self._capability_category(target):
+            category = self._capability_category(target)
+
+            if category == "button":
                 if value:
                     output_lines.append(self._format_output(target, value))
             else:
-                output_lines.append(self._format_output(target, value))
+                if value:
+                    output_lines.append(self._format_output(target, value))
 
         if output_lines:
             self.output_monitor.config(state=tk.NORMAL)
