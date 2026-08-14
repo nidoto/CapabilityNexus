@@ -626,43 +626,64 @@ class CapabilityNexusGUI:
 
                 ttk.Label(
                     fields_frame,
-                    text="Connected XInput devices:",
+                    text="Detected XInput devices:",
                     font=("Segoe UI", 10, "bold"),
                 ).pack(anchor=tk.W, pady=(4, 2))
 
                 if not available:
                     ttk.Label(
                         fields_frame,
-                        text="(no XInput devices connected - connect a gamepad)",
+                        text="(no XInput devices detected - connect a gamepad)",
                         foreground="#c0392b",
                     ).pack(anchor=tk.W, pady=2)
                     hide_bottom()
                 else:
-                    index_var = tk.StringVar()
-                    field_vars["index"] = index_var
+                    connected_var = tk.StringVar()
+                    field_vars["connected_index"] = connected_var
 
                     for slot in available:
-                        radio = ttk.Radiobutton(
-                            fields_frame,
+                        row = ttk.Frame(fields_frame)
+                        row.pack(fill=tk.X, padx=4, pady=3)
+
+                        ttk.Label(
+                            row,
                             text=f"Controller {slot}",
-                            variable=index_var,
-                            value=str(slot),
+                            width=14,
+                        ).pack(side=tk.LEFT)
+
+                        status_label = ttk.Label(row, text="Not connected", width=12)
+                        status_label.pack(side=tk.LEFT)
+
+                        connect_btn = ttk.Button(row, text="Connect")
+                        disconnect_btn = ttk.Button(row, text="Disconnect", state="disabled")
+
+                        def make_connect(cbtn, dbtn, slabel, svalue):
+                            def connect():
+                                connected_var.set(svalue)
+                                slabel.config(text="Connected")
+                                cbtn.state(["disabled"])
+                                dbtn.state(["!disabled"])
+                                show_bottom()
+                            return connect
+
+                        def make_disconnect(cbtn, dbtn, slabel):
+                            def disconnect():
+                                connected_var.set("")
+                                slabel.config(text="Not connected")
+                                cbtn.state(["!disabled"])
+                                dbtn.state(["disabled"])
+                                hide_bottom()
+                            return disconnect
+
+                        connect_btn.configure(
+                            command=make_connect(connect_btn, disconnect_btn, status_label, str(slot)),
                         )
-                        radio.pack(anchor=tk.W, padx=8, pady=2)
-
-                        def make_click(slot_value, rb):
-                            def on_click(_event):
-                                if index_var.get() == slot_value:
-                                    index_var.set("")
-                            return on_click
-
-                        radio.bind(
-                            "<Button-1>",
-                            make_click(str(slot), radio),
+                        disconnect_btn.configure(
+                            command=make_disconnect(connect_btn, disconnect_btn, status_label),
                         )
 
-                    index_var.set(str(available[0]))
-                    show_bottom()
+                        connect_btn.pack(side=tk.LEFT, padx=2)
+                        disconnect_btn.pack(side=tk.LEFT, padx=2)
             elif conn_key in ("bluetooth", "ftms"):
                 # 蓝牙：搜索配对窗口
                 ttk.Button(
@@ -770,8 +791,17 @@ class CapabilityNexusGUI:
                 entry["driver"] = "hid"
                 entry["index"] = int(field_vars["index"].get() or 0)
             elif conn_key == "xinput":
+                connected_index = field_vars.get("connected_index")
+
+                if not connected_index or not connected_index.get():
+                    messagebox.showwarning(
+                        self.t("dlg_no_target"),
+                        "Connect a controller first",
+                    )
+                    return
+
                 entry["driver"] = "xinput"
-                entry["index"] = int(field_vars["index"].get() or 0)
+                entry["index"] = int(connected_index.get())
 
             data = config_io.load_config()
 
