@@ -107,7 +107,7 @@ class CapabilityNexusGUI:
 
         self.device_tree = ttk.Treeview(box, columns=("func",), show="tree headings")
         self.device_tree.heading("#0", text=self.t("tree_device_function"))
-        self.device_tree.heading("func", text=self.t("tree_type"))
+        self.device_tree.heading("func", text=self.t("tree_mapping"))
         self.device_tree.column("func", width=120)
         self.device_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
@@ -191,7 +191,7 @@ class CapabilityNexusGUI:
 
         self.output_tree = ttk.Treeview(box, columns=("func",), show="tree headings")
         self.output_tree.heading("#0", text=self.t("tree_output_device"))
-        self.output_tree.heading("func", text=self.t("tree_type"))
+        self.output_tree.heading("func", text=self.t("tree_mapping"))
         self.output_tree.column("func", width=120)
         self.output_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
@@ -243,13 +243,30 @@ class CapabilityNexusGUI:
             info = type_map.get(out_type)
 
             if info:
+                profile = config_io.load_profile()
+                mappings = profile.get("mappings", {})
+
                 for target, desc in info.targets.items():
+                    driver = self._driving_input(mappings, target)
+
                     self.output_tree.insert(
                         device_node,
                         tk.END,
                         text=f"{target}  ({desc})",
-                        values=("output_function",),
+                        values=("output_function", driver),
                     )
+
+    def _driving_input(self, mappings, target):
+        for source, mapping in mappings.items():
+            items = mapping if isinstance(mapping, list) else [mapping]
+
+            for item in items:
+                tgt = item if isinstance(item, str) else item.get("target")
+
+                if tgt == target:
+                    return source
+
+        return ""
 
     def add_output_dialog(self):
         dialog = tk.Toplevel(self.root)
@@ -370,7 +387,16 @@ class CapabilityNexusGUI:
         data = config_io.load_config()
         packages = config_io.list_package_capabilities()
         profile = config_io.load_profile()
-        mapped = set(profile.get("mappings", {}).keys())
+        mappings = profile.get("mappings", {})
+        mapped = set(mappings.keys())
+
+        def mapped_target(cap_id):
+            m = mappings.get(cap_id)
+
+            if m is None:
+                return ""
+
+            return config_io.mapping_desc(m)
 
         for device in data.get("devices", []):
             name = device.get("name", "?")
@@ -410,7 +436,7 @@ class CapabilityNexusGUI:
                         input_node,
                         tk.END,
                         text=cap_id,
-                        values=("capability",),
+                        values=("capability", mapped_target(cap_id)),
                         tags=("mapped",) if cap_id in mapped else (),
                     )
 
@@ -430,7 +456,7 @@ class CapabilityNexusGUI:
                         output_node,
                         tk.END,
                         text=cap_id,
-                        values=("capability",),
+                        values=("capability", mapped_target(cap_id)),
                         tags=("mapped",) if cap_id in mapped else (),
                     )
 
