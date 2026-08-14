@@ -2546,8 +2546,17 @@ class CapabilityNexusGUI:
         right = ttk.Frame(main)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        canvas = tk.Canvas(right, width=420, height=380, bg="#0f172a", highlightthickness=1, highlightbackground="#334155")
+        canvas = tk.Canvas(right, width=420, height=340, bg="#0f172a", highlightthickness=1, highlightbackground="#334155")
         canvas.pack(fill=tk.BOTH, expand=True)
+
+        # 实时输入显示（读取引擎的 status_monitor）
+        live_var = tk.StringVar(value=self.t("curve_tuner_live_idle"))
+        ttk.Label(
+            right,
+            textvariable=live_var,
+            foreground="#67e8f9",
+            font=("Consolas", 10),
+        ).pack(fill=tk.X, padx=6, pady=(6, 0))
 
         # 底部：状态 + 保存
         bottom = ttk.Frame(dialog)
@@ -2555,6 +2564,42 @@ class CapabilityNexusGUI:
 
         status_var = tk.StringVar(value="")
         ttk.Label(bottom, textvariable=status_var, foreground="#2563eb").pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tuner_job = [None]
+
+        def live_tick():
+            if not dialog.winfo_exists():
+                return
+            cap_id = axis_var.get()
+            cfg = self._curve_axes.get(cap_id)
+            if cfg and self.app is not None and hasattr(self.app, "status_monitor"):
+                monitor = self.app.status_monitor
+                raw = monitor.get_input_value(cap_id)
+                if raw is not None:
+                    from processors.curve import CurveProcessor
+
+                    cp = CurveProcessor(
+                        cfg.get("max_degrees", 30),
+                        cfg.get("deadzone", 1.5),
+                        cfg.get("points"),
+                        cfg.get("mode", "step"),
+                    )
+                    angle = raw / 32767.0 * 180.0
+                    out = cp.process(raw)
+                    pct = out / 32767.0 * 100.0
+                    live_var.set(
+                        self.t("curve_tuner_live").format(
+                            f"{angle:+.1f}", f"{raw:+.0f}", f"{pct:+.0f}", out
+                        )
+                    )
+                else:
+                    live_var.set(self.t("curve_tuner_live_idle"))
+            else:
+                live_var.set(self.t("curve_tuner_live_idle"))
+
+            tuner_job[0] = dialog.after(200, live_tick)
+
+        tuner_job[0] = dialog.after(200, live_tick)
 
         def save():
             try:
@@ -2591,6 +2636,14 @@ class CapabilityNexusGUI:
 
         ttk.Button(bottom, text=self.t("dlg_save"), command=save).pack(side=tk.RIGHT, padx=3)
         ttk.Button(bottom, text=self.t("dlg_close"), command=dialog.destroy).pack(side=tk.RIGHT, padx=3)
+
+        def on_close():
+            if tuner_job[0] is not None:
+                dialog.after_cancel(tuner_job[0])
+                tuner_job[0] = None
+            dialog.destroy()
+
+        dialog.protocol("WM_DELETE_WINDOW", on_close)
 
         self._curve_redraw(canvas, axis_var, deadzone_var, maxdeg_var, status_var)
 
