@@ -76,6 +76,49 @@ class WebService:
         self.callback = callback
         self._server = None
         self._lock = threading.Lock()
+        self._parser = None  # PhoneFrameParser，用于记录连接的手机设备
+
+    def _make_server(self):
+        from devices.websocket_connection import WebSocketServerConnection
+        from devices.websocket_connection import PhoneFrameParser
+
+        self._parser = PhoneFrameParser(event_bus=None)
+
+        def wrapped_callback(message):
+            # 解析 hello 记录设备名；sensors/buttons 帧只更新设备存在，
+            # 实际能力数据由外部 callback 转发（带 event_bus 的 parser）
+            try:
+                import json as _json
+
+                if isinstance(message, bytes):
+                    message = message.decode("utf-8", errors="replace")
+                data = _json.loads(message)
+                if data.get("t") == "hello":
+                    self._parser.parse(message)
+            except (ValueError, _json.JSONDecodeError):
+                pass
+            if self.callback:
+                self.callback(message)
+
+        return WebSocketServerConnection(
+            wrapped_callback,
+            host="0.0.0.0",
+            port=self.port,
+        )
+
+    @property
+    def device_name(self):
+        with self._lock:
+            if self._parser is not None:
+                return self._parser.device_name
+        return ""
+
+    @property
+    def device_capabilities(self):
+        with self._lock:
+            if self._parser is not None:
+                return self._parser.device_capabilities
+        return []
 
     def is_running(self):
         with self._lock:
@@ -87,13 +130,7 @@ class WebService:
             if self._server is not None:
                 return False, "already running"
 
-            from devices.websocket_connection import WebSocketServerConnection
-
-            server = WebSocketServerConnection(
-                self.callback,
-                host="0.0.0.0",
-                port=self.port,
-            )
+            server = self._make_server()
             try:
                 server.open()
             except Exception as error:
@@ -110,6 +147,7 @@ class WebService:
 
             server = self._server
             self._server = None
+            self._parser = None
             try:
                 server.close()
             except Exception as error:

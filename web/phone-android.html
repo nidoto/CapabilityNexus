@@ -252,6 +252,7 @@ function connect() {
   ws.onopen = () => {
     connected = true;
     setStatus("已连接: " + url, true);
+    sendHello();
     sendAll();
   };
   ws.onclose = () => {
@@ -304,15 +305,32 @@ function setMode(m) {
 let roll = 0, pitch = 0, yaw = 0;
 let accelX = 0, accelY = 0, accelZ = 0;
 let gas = 0, brake = 0;
+let gyroAvailable = false;
+let currentSteer = 0;   // 方向盘角度（陀螺仪或触屏）
+let currentPitch = 0;   // 俯仰（陀螺仪或触屏）
 const buttons = { a: false, b: false, x: false, y: false };
 const dpad = { up: false, down: false, left: false, right: false };
 
 // 设备方向（陀螺仪）
 function handleOrientation(e) {
-  roll = e.beta || 0;   // 前后倾斜（方向盘角度用 gamma 更合适，这里映射）
-  pitch = e.gamma || 0;
+  // 安卓坐标：
+  //   alpha  = 绕 Z 轴（指南针方向）
+  //   beta   = 绕 X 轴（前后倾斜）
+  //   gamma  = 绕 Y 轴（左右倾斜）
+  // 方向盘：左右倾斜用 gamma；油门/刹车：前后倾斜用 beta
+  if (!gyroAvailable) {
+    gyroAvailable = true;
+    setStatus(connected ? "已连接（陀螺仪可用）" : "自动连接中...", connected);
+  }
+  roll = e.gamma || 0;    // 左右倾斜（方向盘转向）
+  pitch = e.beta || 0;    // 前后倾斜（油门/刹车）
   yaw = e.alpha || 0;
+  currentSteer = roll;
+  currentPitch = pitch;
+  gas = clamp((pitch - 5) / 40, 0, 1);
+  brake = clamp((-pitch - 5) / 40, 0, 1);
   updateWheel();
+  sendAll();
 }
 
 // 设备运动（加速度）
@@ -323,21 +341,81 @@ function handleMotion(e) {
   accelZ = a.z || 0;
 }
 
+// Android Chrome 非 HTTPS 页面无法读取 deviceorientation：
+// 降级到触屏方向盘 / 触屏油门刹车
+(function() {
+  var isSecure = (location.protocol === "https:" ||
+                  location.hostname === "localhost" ||
+                  location.hostname === "127.0.0.1");
+  if (!isSecure) {
+    setStatus(connected ? "已连接（触屏模式）" : "自动连接中...（触屏模式）", connected);
+  }
+})();
+
 window.addEventListener("deviceorientation", handleOrientation, true);
 window.addEventListener("devicemotion", handleMotion, true);
 
+// ---- 触屏方向盘（非 HTTPS 降级） ----
+var wheelEl = document.getElementById("wheel");
+var wheelDrag = false;
+var wheelStartX = 0;
+var wheelStartAngle = 0;
+
+wheelEl.addEventListener("pointerdown", function(e) {
+  e.preventDefault();
+  wheelDrag = true;
+  wheelStartAngle = currentSteer;
+  wheelStartX = e.clientX;
+});
+
+window.addEventListener("pointermove", function(e) {
+  if (!wheelDrag) return;
+  var dx = e.clientX - wheelStartX;
+  if (!gyroAvailable) {
+    // 左右拖拽转向
+    currentSteer = clamp(wheelStartAngle - dx * 0.4, -45, 45);
+    updateWheel();
+    sendAll();
+  }
+});
+
+window.addEventListener("pointerup", function() { wheelDrag = false; });
+window.addEventListener("pointercancel", function() { wheelDrag = false; });
+
+// ---- 触屏油门/刹车（按住时递增） ----
+var gasPressed = false, brakePressed = false;
+
+function pedalLoop() {
+  if (!gyroAvailable) {
+    if (gasPressed) gas = clamp(gas + 0.08, 0, 1);
+    else if (brakePressed) brake = clamp(brake + 0.08, 0, 1);
+    else { gas = clamp(gas - 0.05, 0, 1); brake = clamp(brake - 0.05, 0, 1); }
+    updateWheel();
+    sendAll();
+  }
+}
+
+document.querySelector(".pedal.gas").addEventListener("pointerdown", function(e) {
+  e.preventDefault();
+  if (!gyroAvailable) { gasPressed = true; brakePressed = false; }
+});
+document.querySelector(".pedal.gas").addEventListener("pointerup", function() { gasPressed = false; });
+document.querySelector(".pedal.brake").addEventListener("pointerdown", function(e) {
+  e.preventDefault();
+  if (!gyroAvailable) { brakePressed = true; gasPressed = false; }
+});
+document.querySelector(".pedal.brake").addEventListener("pointerup", function() { brakePressed = false; });
+
+setInterval(pedalLoop, 50);
+
 function updateWheel() {
-  // 方向盘：左右倾斜 = gamma（roll）→ 旋转角度
-  // 手机竖屏拿，左右倾斜时 gamma 变化
-  const steerDeg = clamp(roll, -45, 45);
+  // 陀螺仪可用时用陀螺仪值；否则用触屏方向盘值
+  const steerDeg = clamp(currentSteer, -45, 45);
   const wheel = document.getElementById("wheel");
   wheel.style.transform = "rotate(" + (-steerDeg) + "deg)";
-  document.getElementById("v_roll").textContent = roll.toFixed(1);
-  document.getElementById("v_pitch").textContent = pitch.toFixed(1);
+  document.getElementById("v_roll").textContent = currentSteer.toFixed(1);
+  document.getElementById("v_pitch").textContent = currentPitch.toFixed(1);
 
-  // 油门/刹车：前后倾斜 pitch
-  gas = clamp((pitch - 5) / 40, 0, 1);
-  brake = clamp((-pitch - 5) / 40, 0, 1);
   document.getElementById("gasFill").style.height = (gas * 100) + "%";
   document.getElementById("brakeFill").style.height = (brake * 100) + "%";
 }
@@ -373,6 +451,26 @@ bindButton("dpad_right", "dpad_right");
 
 // 发送
 let lastSend = 0;
+
+function deviceName() {
+  var ua = navigator.userAgent || "";
+  var m = ua.match(/\(([^)]+)\)/);
+  var model = m ? m[1].split(";")[0].trim() : "Phone";
+  return "Phone " + model;
+}
+
+function sendHello() {
+  if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+  var payload = {
+    t: "hello",
+    name: deviceName(),
+    capabilities: [
+      "gyroscope", "accelerometer", "buttons", "dpad", "gas", "brake"
+    ]
+  };
+  ws.send(JSON.stringify(payload));
+}
+
 function sendAll() {
   if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
   const now = performance.now();
@@ -381,8 +479,8 @@ function sendAll() {
 
   const payload = {
     t: "sensors",
-    roll: round(roll),
-    pitch: round(pitch),
+    roll: round(currentSteer),
+    pitch: round(currentPitch),
     yaw: round(yaw),
     accelX: round(accelX),
     accelY: round(accelY),

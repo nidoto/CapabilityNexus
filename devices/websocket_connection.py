@@ -160,6 +160,15 @@ class PhoneFrameParser:
     def __init__(self, event_bus):
         self.event_bus = event_bus
         self._last_buttons = {}
+        self.device = None  # {"name", "capabilities"}
+
+    @property
+    def device_name(self):
+        return (self.device or {}).get("name", "Phone")
+
+    @property
+    def device_capabilities(self):
+        return (self.device or {}).get("capabilities", [])
 
     def parse(self, message):
         try:
@@ -171,7 +180,12 @@ class PhoneFrameParser:
 
         frame_type = data.get("t", data.get("type", "sensors"))
 
-        if frame_type in ("sensors", "sensor"):
+        if frame_type == "hello":
+            self.device = {
+                "name": data.get("name") or "Phone",
+                "capabilities": data.get("capabilities") or [],
+            }
+        elif frame_type in ("sensors", "sensor"):
             self._emit_sensors(data)
         elif frame_type == "buttons":
             self._emit_buttons(data)

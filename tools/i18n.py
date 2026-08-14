@@ -191,6 +191,8 @@ STRINGS = {
         "svc_install": "安装",
         "svc_uninstall": "卸载",
         "svc_refresh": "刷新",
+        "svc_device": "设备",
+        "svc_capabilities": "能力",
     },
     "en": {
         "app_title": "CapabilityNexus",
@@ -379,6 +381,8 @@ STRINGS = {
         "svc_install": "Install",
         "svc_uninstall": "Uninstall",
         "svc_refresh": "Refresh",
+        "svc_device": "Device",
+        "svc_capabilities": "Capabilities",
     },
 }
 

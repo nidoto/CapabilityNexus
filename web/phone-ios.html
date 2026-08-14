@@ -252,6 +252,7 @@ function connect() {
   ws.onopen = () => {
     connected = true;
     setStatus("已连接: " + url, true);
+    sendHello();
     sendAll();
   };
   ws.onclose = () => {
@@ -410,6 +411,26 @@ bindButton("dpad_right", "dpad_right");
 
 // 发送
 let lastSend = 0;
+
+function deviceName() {
+  var ua = navigator.userAgent || "";
+  var m = ua.match(/\(([^)]+)\)/);
+  var model = m ? m[1].split(";")[0].trim() : "Phone";
+  return "Phone " + model;
+}
+
+function sendHello() {
+  if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+  var payload = {
+    t: "hello",
+    name: deviceName(),
+    capabilities: [
+      "gyroscope", "accelerometer", "buttons", "dpad", "gas", "brake"
+    ]
+  };
+  ws.send(JSON.stringify(payload));
+}
+
 function sendAll() {
   if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
   const now = performance.now();

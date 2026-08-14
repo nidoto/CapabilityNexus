@@ -1121,20 +1121,28 @@ class CapabilityNexusGUI:
                 text=self.t("svc_stop") if running else self.t("svc_start"),
                 command=lambda: toggle_web(),
             )
+            lines = []
             if running:
                 # 优先显示最适合的局域网 IP
                 best = info.get("best_ip") or ""
                 if best:
-                    self._web_ip_var.set(f"http://{best}:{info['port']}/")
+                    lines.append(f"http://{best}:{info['port']}/")
                 else:
-                    urls = "  ".join(info["page_urls"])
-                    self._web_ip_var.set(urls)
+                    lines.append("  ".join(info["page_urls"]))
+
+                # 已连接的手机设备 + 能力
+                dev_name = self._web_service.device_name
+                dev_caps = self._web_service.device_capabilities
+                if dev_name:
+                    lines.append(f"{self.t('svc_device')}: {dev_name}")
+                if dev_caps:
+                    lines.append(f"{self.t('svc_capabilities')}: {', '.join(dev_caps)}")
             else:
                 # 未运行时也提示可用的本机 IP
                 best = info.get("best_ip") or ""
-                self._web_ip_var.set(
-                    f"IP: {best}" if best else ""
-                )
+                lines.append(f"IP: {best}" if best else "")
+
+            self._web_ip_var.set("\n".join(lines) if lines else "")
 
         def toggle_web():
             if self._web_service.is_running():
@@ -1225,9 +1233,14 @@ class CapabilityNexusGUI:
 
         from devices.websocket_connection import PhoneFrameParser
 
+        # 持久 parser：保持按钮边沿状态跨消息
+        if not hasattr(self, "_phone_engine_parser") or self._phone_engine_parser is None:
+            self._phone_engine_parser = PhoneFrameParser(self.app.event_bus)
+        else:
+            self._phone_engine_parser.event_bus = self.app.event_bus
+
         try:
-            parser = PhoneFrameParser(self.app.event_bus)
-            parser.parse(message)
+            self._phone_engine_parser.parse(message)
         except Exception as error:
             print("[PhoneData] parse failed:", error)
 
