@@ -11,6 +11,20 @@
             "source": "xbox.back",
             "type": "tap",
             "target": "xbox.start"
+        },
+
+        {
+            "source": "xbox.a",
+            "type": "long_press",
+            "target": "xbox.b",
+            "params": { "duration": 3.0 }
+        },
+
+        {
+            "source": "xbox.x",
+            "type": "double_tap",
+            "target": "xbox.y",
+            "params": { "interval": 0.4 }
         }
 
     ]
