@@ -103,6 +103,9 @@ class WebSocketServerConnection(LineConnection):
                 headers = Headers({
                     "Content-Type": "text/html; charset=utf-8",
                     "Content-Length": str(len(body)),
+                    "Cache-Control": "no-store, no-cache, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
                 })
                 return Response(200, "OK", headers, body)
 

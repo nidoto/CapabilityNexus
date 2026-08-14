@@ -168,7 +168,7 @@
 <body>
 
 <div class="top">
-  <input id="addr" type="text" value="ws://192.168.1.100:8765/ws" placeholder="ws://PC-IP:8765/ws">
+  <input id="addr" type="text" value="" placeholder="自动使用当前地址（也可手动填 ws://PC-IP:8765/ws）">
   <button id="connectBtn">连接</button>
 </div>
 
@@ -236,7 +236,16 @@ function setStatus(text, ok) {
 }
 
 function connect() {
-  const url = addrInput.value.trim();
+  // 地址为空时，用当前页面的主机（自动匹配 PC IP + 端口）
+  let url = addrInput.value.trim();
+  if (!url) {
+    url = "ws://" + window.location.host + "/ws";
+    addrInput.value = url;
+  }
+  if (!url.startsWith("ws://") && !url.startsWith("wss://")) {
+    url = "ws://" + url + ":8765/ws";
+    addrInput.value = url;
+  }
   if (!url) return;
   try {
     ws = new WebSocket(url);
@@ -257,6 +266,11 @@ function connect() {
     setStatus("错误: " + (e.message || "连接错误"), false);
   };
 }
+
+// 页面加载后：用当前主机预填连接地址
+(function() {
+  addrInput.value = "ws://" + window.location.host + "/ws";
+})();
 
 document.getElementById("connectBtn").onclick = connect;
 
