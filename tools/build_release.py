@@ -1,25 +1,30 @@
-"""Build a distributable CapabilityNexus release directory.
+"""Build a distributable CapabilityNexus release.
 
 Usage:
-    py -3 tools/build_release.py
+    py -3 tools/build_release.py                 # full release (exe + drivers)
+    py -3 tools/build_release.py --no-exe        # source distribution only
+    py -3 tools/build_release.py --no-drivers    # exe but skip driver download
 
 Produces a fresh folder under `dist/` (e.g. `dist/CapabilityNexus-1.7.0/`)
-containing the client source, default config, packages, documentation,
-launcher and requirements. It never touches the working tree and it excludes
-local-only files (device tuning in profiles/local, caches, __pycache__).
+containing:
 
-The build is a source distribution, not a frozen executable. End users still
-need Python 3.11+ and the drivers from THIRD_PARTY_NOTICES.md.
+  - the Python client source + default config + packages + docs + launcher
+  - a frozen Windows executable (PyInstaller, one-dir) when PyInstaller is
+    available, or when --no-exe is not given
+  - bundled official ViGEmBus / HidHide driver installers and their licenses
+
+The build never touches the working tree. Local-only files (device tuning in
+profiles/local, caches, __pycache__) are excluded.
 """
 
 import os
 import shutil
+import subprocess
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERSION = "1.7.0"
 
-# 参与分发的顶层目录 / 文件
 INCLUDE_DIRS = (
     "core",
     "devices",
@@ -44,7 +49,6 @@ INCLUDE_FILES = (
     "THIRD_PARTY_NOTICES.md",
 )
 
-# 打包时剔除的文件 / 目录（本地私有或缓存）
 EXCLUDE_NAMES = {
     "__pycache__",
     ".git",
@@ -84,14 +88,23 @@ def _copy_tree(src, dst):
             shutil.copy2(s, d)
 
 
-def build():
-    dist_root = os.path.join(PROJECT_ROOT, "dist")
-    out_dir = os.path.join(dist_root, f"CapabilityNexus-{VERSION}")
+def _write_json(path, data):
+    import json
 
-    if os.path.exists(out_dir):
-        shutil.rmtree(out_dir)
-    os.makedirs(out_dir, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
+
+def _pyinstaller_available():
+    try:
+        import PyInstaller  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def build_source(out_dir):
+    """复制源码 + 默认配置 + 文档到发布目录。"""
     for directory in INCLUDE_DIRS:
         _copy_tree(
             os.path.join(PROJECT_ROOT, directory),
@@ -103,10 +116,7 @@ def build():
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(out_dir, filename))
 
-    # 配置默认值：空设备、单个虚拟 XInput 输出
-    default_config = {
-        "devices": [],
-    }
+    default_config = {"devices": []}
     default_outputs = {
         "outputs": [
             {
@@ -118,27 +128,107 @@ def build():
     }
     default_profile = {"mappings": {}}
 
-    import json
-
     _write_json(os.path.join(out_dir, "config", "devices.json"), default_config)
     _write_json(os.path.join(out_dir, "config", "outputs.json"), default_outputs)
     _write_json(os.path.join(out_dir, "profiles", "default.json"), default_profile)
 
-    print(f"[Build] Release created at:")
+
+def build_exe(out_dir):
+    """用 PyInstaller 打包 exe 到发布目录的 windows/ 子目录。"""
+    if not _pyinstaller_available():
+        print("[Build] PyInstaller not installed - skipping exe build.")
+        return False
+
+    windows_dir = os.path.join(out_dir, "windows")
+    os.makedirs(windows_dir, exist_ok=True)
+
+    spec_src = os.path.join(PROJECT_ROOT, "CapabilityNexus.spec")
+    if not os.path.exists(spec_src):
+        print("[Build] No spec file CapabilityNexus.spec - skipping exe.")
+        return False
+
+    work_dir = os.path.join(PROJECT_ROOT, "build", "pyinstaller")
+    env = dict(os.environ)
+    env["CNX_DATA_DIR"] = out_dir
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--workpath", work_dir,
+        "--distpath", windows_dir,
+        spec_src,
+    ]
+    print("[Build] Running PyInstaller...")
+    try:
+        subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, env=env)
+    except (OSError, subprocess.CalledProcessError) as error:
+        print(f"[Build] PyInstaller failed: {error}")
+        return False
+
+    # exe 产物位于 windows/CapabilityNexus/
+    exe_src = os.path.join(windows_dir, "CapabilityNexus")
+    if os.path.exists(exe_src):
+        print(f"[Build] Executable: {exe_src}")
+        return True
+
+    print("[Build] PyInstaller output not found.")
+    return False
+
+
+def build_drivers(out_dir, vigembus_src=None):
+    """捆绑 ViGEmBus / HidHide 安装程序与许可证。"""
+    sys.path.insert(0, os.path.join(PROJECT_ROOT, "tools"))
+    try:
+        from fetch_drivers import fetch
+        ok = fetch(out_dir, vigembus_src=vigembus_src)
+        return ok
+    except ImportError as error:
+        print(f"[Build] fetch_drivers import failed: {error}")
+        return False
+
+
+def build():
+    args = sys.argv[1:]
+    do_exe = "--no-exe" not in args
+    do_drivers = "--no-drivers" not in args
+
+    dist_root = os.path.join(PROJECT_ROOT, "dist")
+    out_dir = os.path.join(dist_root, f"CapabilityNexus-{VERSION}")
+
+    if os.path.exists(out_dir):
+        try:
+            shutil.rmtree(out_dir)
+        except OSError as error:
+            print(f"[Build] Warning: could not clear {out_dir}: {error}")
+            print("  Close any running CapabilityNexus.exe and retry.")
+            return 1
+    os.makedirs(out_dir, exist_ok=True)
+
+    print("[Build] Stage 1/3: source distribution")
+    build_source(out_dir)
+
+    if do_exe:
+        print()
+        print("[Build] Stage 2/3: frozen executable")
+        build_exe(out_dir)
+
+    if do_drivers:
+        print()
+        print("[Build] Stage 3/3: driver installers")
+        build_drivers(out_dir)
+
+    print()
+    print("[Build] Release created at:")
     print(f"  {out_dir}")
     print()
-    print("Next steps for end users:")
-    print("  1. Install Python 3.11+")
-    print("  2. py -3 -m pip install -r requirements.txt")
-    print("  3. Install drivers (ViGEmBus, HidHide) - see THIRD_PARTY_NOTICES.md")
-    print("  4. Double-click start.cmd")
-
-
-def _write_json(path, data):
-    import json
-
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    print("Contents:")
+    print("  - python/      client source (run: py -3 -m pip install -r requirements.txt)")
+    print("  - windows/     frozen executable (double-click CapabilityNexus.exe)")
+    print("  - drivers/     official ViGEmBus / HidHide installers")
+    print()
+    print("End users still install the drivers with consent (see THIRD_PARTY_NOTICES.md).")
 
 
 if __name__ == "__main__":

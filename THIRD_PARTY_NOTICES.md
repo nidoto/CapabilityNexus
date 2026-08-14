@@ -20,7 +20,9 @@ Administrator privileges or a system reboot may be required.
 
 - Project: https://github.com/nefarius/ViGEmBus
 - Purpose: provide the XInput-compatible controller backend
-- Distribute only an official release and include its license and notices.
+- Distribute only an official release (or a vendor-verified copy such as the
+  1.21.442.0 driver shipped with a key remapper) and include its license and
+  notices.
 
 ## Python Packages
 

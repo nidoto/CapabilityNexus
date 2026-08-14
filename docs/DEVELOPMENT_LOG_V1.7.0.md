@@ -63,6 +63,20 @@ boundaries and product documentation.
   - `tools/build_release.py`: produces a source distribution under `dist/`
     (client code, default config, docs, launcher); excludes local device
     tuning (`profiles/local`), caches and `__pycache__`
+- Frozen executable (PyInstaller)
+  - `CapabilityNexus.spec` (one-dir, windowed) collects sanitized
+    `config/profiles/packages` data (no caches, no `active_profile`, no
+    `profiles/local`)
+  - `tools/build_release.py` now builds a frozen `windows/CapabilityNexus.exe`
+    alongside the source distribution; verified it starts and stays running
+- Bundled official driver installers
+  - `tools/fetch_drivers.py` downloads official HidHide 1.5.230 setup plus its
+    MIT license into the release `drivers/` directory
+  - ViGEmBus is bundled from a locally verified source when provided
+    (`--vigembus-src`): the full x64/x86 driver package (1.21.442.0, from a
+    vendor bundle such as QKeyMapper) is copied so the released driver is
+    complete and self-contained; official 1.22.0 is used as fallback
+  - Drivers are never installed silently; official builds require user consent
 
 ## ESP32 Boundary
 
@@ -80,11 +94,11 @@ axis values. The open client forwards final control values.
 
 ## Remaining Work
 
-- Add official third-party installer assets and license bundles (download
-  ViGEmBus / HidHide official installers and vendor their license files)
 - Add automated hardware-in-the-loop tests
 - Test multiple games and controller selection behavior
-- Consider a frozen executable (e.g. PyInstaller) for non-Python users
+- Consider code signing for the frozen executable
+- Create a setup wizard / bundler that installs Python, drivers and the app
+  in one step for non-technical users
 
 ## Product Documentation Update
 
