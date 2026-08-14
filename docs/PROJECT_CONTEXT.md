@@ -103,17 +103,21 @@ right_x
 当前版本：
 
 
-V1.4.0
+V1.5.0
 
 
 当前状态：
 
 
-映射表重构完成（一对多/多对一）
+更多输出设备完成（DS4）
 
-Transform Layer 完成
+ANT+ 骑行台完成
 
-设备库完整支持完成
+输出设备管理完成
+
+GUI 完善完成
+
+代码整理完成
 
 
 ---
@@ -235,10 +239,13 @@ Transform Layer 完成
 支持：
 
 
-- VirtualXInput（虚拟 Xbox 360）
+- VirtualXInput（XInput 兼容虚拟手柄）
+- VirtualDS4（DualShock 兼容虚拟手柄）
 - VirtualKeyboard（pynput）
 - VirtualMouse（pynput）
-- RealXInputOutput（真实 Xbox 马达）
+- RealXInputOutput（真实 XInput 设备马达）
+- OutputDeviceManager（输出设备管理，可多个并存）
+- VGamepadDevice（xinput/ds4 公共基类）
 - OutputRouter（路由分发）
 - RequestHandler（游戏请求处理）
 
@@ -312,13 +319,13 @@ Xbox One 手柄（蓝牙 / XInput）
 ## 更多输出设备
 
 
-虚拟 DS4 / 方向盘 / 飞行摇杆 / HID
+虚拟方向盘 / 飞行摇杆 / HID 通用输出
 
 
 ## 更多输入源
 
 
-ANT+ 骑行台（需适配器）
+ANT+ 适配器实测
 
 
 ## 高级逻辑表
@@ -331,6 +338,12 @@ ANT+ 骑行台（需适配器）
 
 
 实时输入显示 / 录制映射
+
+
+## 设备库
+
+
+投稿流程 / 自动下载
 
 
 ---
@@ -367,13 +380,13 @@ ARCHITECTURE.md
 # 9. 下一阶段
 
 
-V1.5.0：
+V1.6.0：
 
 
-更多输出设备（DS4/方向盘/飞行摇杆）
+虚拟方向盘/飞行摇杆输出
 
-ANT+ 骑行台
+高级逻辑表（长按时长/双击/组合键）
 
-高级逻辑表
+GUI 实时输入显示
 
-GUI 增强
+设备库投稿流程
