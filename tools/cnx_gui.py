@@ -15,6 +15,7 @@ class CapabilityNexusGUI:
     def __init__(self, root):
         self.root = root
         self.i18n = I18n("zh")
+        self.app = None
 
         self.root.title(self.t("app_title"))
         self.root.geometry("1000x650")
@@ -23,6 +24,14 @@ class CapabilityNexusGUI:
         self._build_layout()
 
         self.refresh_devices()
+        self._start_monitor_loop()
+
+    def _start_monitor_loop(self):
+        self._monitor_job = self.root.after(200, self._monitor_tick)
+
+    def _monitor_tick(self):
+        self._refresh_live_values()
+        self._monitor_job = self.root.after(200, self._monitor_tick)
 
     def t(self, key):
         return self.i18n.t(key)
@@ -44,6 +53,9 @@ class CapabilityNexusGUI:
 
         settings_menu = tk.Menu(menubar, tearoff=0)
         settings_menu.add_command(label=self.t("menu_preferences"), command=self.show_preferences)
+        settings_menu.add_separator()
+        settings_menu.add_command(label=self.t("menu_start_engine"), command=self.start_engine)
+        settings_menu.add_command(label=self.t("menu_stop_engine"), command=self.stop_engine)
         settings_menu.add_separator()
         settings_menu.add_command(label=self.t("menu_exit"), command=self.root.quit)
         menubar.add_cascade(label=self.t("menu_system"), menu=settings_menu)
@@ -1419,6 +1431,82 @@ class CapabilityNexusGUI:
 
     def show_help(self):
         messagebox.showinfo(self.t("help_title"), self.t("help_body"))
+
+    #
+    # Engine control + live display
+    #
+
+    def start_engine(self):
+        if self.app is not None:
+            self.log("Engine already running.")
+            return
+
+        try:
+            from app import CapabilityNexusApp
+
+            self.app = CapabilityNexusApp()
+            self.log("Engine started.")
+        except Exception as e:
+            self.log(f"Engine start failed: {e}")
+
+    def stop_engine(self):
+        if self.app is None:
+            self.log("Engine not running.")
+            return
+
+        try:
+            self.app.close()
+        except Exception as e:
+            self.log(f"Engine stop error: {e}")
+
+        self.app = None
+        self.log("Engine stopped.")
+
+    def _refresh_live_values(self):
+        if self.app is None or not hasattr(self.app, "status_monitor"):
+            return
+
+        monitor = self.app.status_monitor
+
+        inputs = monitor.snapshot_inputs()
+        outputs = monitor.snapshot_outputs()
+
+        # 更新输入设备树：名称后附加实时值
+        for item in self._iter_tree():
+            node = self.device_tree.item(item)
+            tags = node.get("tags", [])
+
+            if "capability" in tags:
+                cap_id = node.get("text")
+                value = inputs.get(cap_id)
+
+                if value is not None:
+                    base = cap_id
+                    if " [" in node.get("text"):
+                        base = node.get("text").split(" [")[0]
+                    self.device_tree.item(item, text=f"{base} [{value:.2f}]")
+
+        # 更新输出设备树
+        for item in self._iter_output_tree():
+            node = self.output_tree.item(item)
+            tags = node.get("tags", [])
+
+            if "output_function" in tags:
+                text = node.get("text")
+                target = text.split("  (")[0]
+                value = outputs.get(target)
+
+                if value is not None:
+                    base = text.split(" [")[0]
+                    self.device_tree_values = None
+                    self.output_tree.item(item, text=f"{base} [{value:.2f}]")
+
+    def _iter_output_tree(self, parent=""):
+        items = []
+        for item in self.output_tree.get_children(parent):
+            items.append(item)
+            items.extend(self._iter_output_tree(item))
+        return items
 
     #
     # Log

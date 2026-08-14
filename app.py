@@ -7,6 +7,7 @@ from core.channel import Channel
 from core.processed_channel import ProcessedChannel
 from core.system_event import OutputEvent
 from core.stream import StreamData
+from core.status_monitor import StatusMonitor
 
 from packages.manager import PackageManager
 from processors.manager import ProcessorManager
@@ -24,6 +25,9 @@ class CapabilityNexusApp:
     def __init__(self):
         self.event_bus = EventBus()
         self.registry = CapabilityRegistry()
+
+        self.status_monitor = StatusMonitor(self.event_bus)
+        self.status_monitor.start()
 
         self._build_pipeline()
         self._build_outputs()
