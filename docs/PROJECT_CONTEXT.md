@@ -103,21 +103,19 @@ right_x
 当前版本：
 
 
-V1.5.0
+V1.6.0
 
 
 当前状态：
 
 
-更多输出设备完成（DS4）
+实时输入/输出监控完成
 
-ANT+ 骑行台完成
+高级逻辑表完成
 
-输出设备管理完成
+GUI 流程优化完成
 
-GUI 完善完成
-
-代码整理完成
+设备一致性修复完成
 
 
 ---
@@ -136,6 +134,7 @@ GUI 完善完成
 - Stream 系统
 - 双向事件（OutputEvent / DeviceRequestEvent）
 - 传输控制（stream/state/edge）
+- 状态监视（StatusMonitor 实时快照）
 
 
 ---
@@ -227,6 +226,7 @@ GUI 完善完成
 
 - 用户逻辑变换（映射前插入）
 - hold（按住）/ tap（单击脉冲）/ invert（反转）
+- long_press（长按）/ double_tap（连按）/ hold_repeat（按住连发）
 - config/transforms.json
 - 防循环（transformed 标记）
 
@@ -331,13 +331,13 @@ ANT+ 适配器实测
 ## 高级逻辑表
 
 
-长按时长 / 双击 / 组合键
+组合键 / 条件触发
 
 
 ## GUI 增强
 
 
-实时输入显示 / 录制映射
+录制映射
 
 
 ## 设备库
@@ -380,13 +380,11 @@ ARCHITECTURE.md
 # 9. 下一阶段
 
 
-V1.6.0：
+V1.7.0：
 
 
 虚拟方向盘/飞行摇杆输出
 
-高级逻辑表（长按时长/双击/组合键）
-
-GUI 实时输入显示
-
 设备库投稿流程
+
+GUI 录制映射

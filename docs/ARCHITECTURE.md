@@ -1,4 +1,4 @@
-﻿CapabilityNexus V1.5.0 系统架构说明
+﻿CapabilityNexus V1.6.0 系统架构说明
 1. 项目定位
 
 CapabilityNexus 是一个通用现实输入能力转换框架。
@@ -165,6 +165,15 @@ core/transport.py
 stream - 持续流，按 rate 节流
 state  - 最新值，值变化才发
 edge   - 边沿触发，按下/释放瞬间才发
+5.4 StatusMonitor
+
+core/status_monitor.py
+
+实时状态监视：
+
+订阅 StreamData（输入）和 OutputEvent（输出）
+维护实时状态快照（线程安全）
+GUI 轮询读取，实现实时显示
 6. 设备识别系统
 
 目录：
@@ -206,6 +215,9 @@ devices/device_manager.py
 2. 查设备库（auto 识别）
 3. 未命中 → 查 config/devices.json（手动配置）
 4. 构建输入源实例
+
+自动连接的成品设备（product）登记到 config（标记 auto_connected），
+设备树与实时监控数据一致。
 7. 连接层
 
 目录：
@@ -311,9 +323,12 @@ ProcessedChannel → [TransformLayer] → MappingEngine
 
 内置变换：
 
-hold  - 按住 source，输出 target 持续
-tap   - source 按下瞬间，输出 target 脉冲一次
-invert - 反转值（1 <-> 0）
+hold        - 按住 source，输出 target 持续
+tap         - source 按下瞬间，输出 target 脉冲一次
+invert      - 反转值（1 <-> 0）
+long_press  - 长按 duration 秒后松开触发
+double_tap  - 连按两次（interval 秒内）触发
+hold_repeat - 按住时按 interval 秒间隔重复触发
 
 配置：
 
@@ -508,9 +523,8 @@ CapabilityNexus 是开源的现实输入抽象框架。
 10. 连接方式可插拔，主流内建 + 用户自定义。
 21. 下一阶段
 
-V1.6.0：
+V1.7.0：
 
 虚拟方向盘/飞行摇杆输出
-高级逻辑表（长按时长/双击/组合键）
-GUI 实时输入显示
 设备库投稿流程
+GUI 录制映射
