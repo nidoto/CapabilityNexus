@@ -186,8 +186,10 @@
     <div class="hub">STEER</div>
   </div>
   <div class="sensor-box">
-    <div class="sensor-row"><span>Roll (方向)</span><span id="v_roll">0.0</span></div>
-    <div class="sensor-row"><span>Pitch (油门/刹车)</span><span id="v_pitch">0.0</span></div>
+    <div class="sensor-row"><span>Steer (方向)</span><span id="v_roll">0.0</span></div>
+    <div class="sensor-row"><span>Tilt (油门/刹车)</span><span id="v_pitch">0.0</span></div>
+    <div class="sensor-row"><span>原始 α/β/γ</span><span id="v_raw">0 / 0 / 0</span></div>
+    <button id="calBtn" style="width:100%;margin-top:8px;padding:10px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:bold;">校准（以当前姿态为 0 点）</button>
   </div>
   <div class="pedals">
     <div class="pedal gas">
@@ -302,11 +304,35 @@ function setMode(m) {
 }
 
 // 传感器状态
+let rawAlpha = 0, rawBeta = 0, rawGamma = 0;
 let roll = 0, pitch = 0, yaw = 0;
 let accelX = 0, accelY = 0, accelZ = 0;
 let gas = 0, brake = 0;
+let gyroAvailable = false;
+let currentSteer = 0;
+let currentPitch = 0;
+let calOffset = { alpha: 0, beta: 0, gamma: 0, has: false };
 const buttons = { a: false, b: false, x: false, y: false };
 const dpad = { up: false, down: false, left: false, right: false };
+
+// 校准：以当前姿态为 0 点
+function calibrate() {
+  if (!gyroAvailable) {
+    setStatus("陀螺仪不可用，无法校准", false);
+    return;
+  }
+  calOffset = {
+    alpha: rawAlpha,
+    beta: rawBeta,
+    gamma: rawGamma,
+    has: true,
+  };
+  currentSteer = 0;
+  currentPitch = 0;
+  updateWheel();
+  sendAll();
+  setStatus("已校准：当前姿态为 0 点", true);
+}
 
 // iOS 需要 HTTPS + 用户授权
 (function() {
@@ -337,17 +363,45 @@ function requestIosPermission() {
   }
 }
 
-// 设备方向（陀螺仪）— iOS 的 gamma 符号与安卓相反，这里统一
+// 设备方向（陀螺仪）— iOS 与安卓的 gamma 符号相反，统一处理
 function handleOrientation(e) {
-  // iOS 坐标：beta=前后, gamma=左右（符号与安卓相反）
-  // 安卓：beta=前后, gamma=左右
-  // 统一输出：roll=左右倾斜(gamma)，pitch=前后倾斜(beta)
-  // iOS gamma 取反，使方向手感与安卓一致
-  var iosGammaSign = -1; // iOS gamma 符号修正
-  roll = (e.beta || 0) * iosGammaSign;   // 方向盘：左右倾斜
-  pitch = e.gamma || 0;                   // 油门/刹车：前后倾斜
-  yaw = e.alpha || 0;
+  if (!gyroAvailable) {
+    gyroAvailable = true;
+    setStatus(connected ? "已连接（陀螺仪可用，可校准）" : "自动连接中...", connected);
+  }
+  rawAlpha = e.alpha || 0;
+  rawBeta = e.beta || 0;
+  rawGamma = e.gamma || 0;
+
+  // 校准偏移：发送值 = 原始值 - 校准偏移
+  var a = rawAlpha, b = rawBeta, g = rawGamma;
+  if (calOffset.has) {
+    a = rawAlpha - calOffset.alpha;
+    b = rawBeta - calOffset.beta;
+    g = rawGamma - calOffset.gamma;
+  }
+
+  // 方向盘：左右倾斜（iOS gamma 符号取反与安卓一致）
+  yaw = a;
+  roll = g * (-1);
+  pitch = b;
+  currentSteer = roll;
+  currentPitch = pitch;
+
+  // 前后倾斜 → 油门/刹车（仅当没有点按踏板时）
+  if (!gasPressed && !brakePressed) {
+    gas = clamp((pitch - 5) / 40, 0, 1);
+    brake = clamp((-pitch - 5) / 40, 0, 1);
+  }
+
+  var rawEl = document.getElementById("v_raw");
+  if (rawEl) {
+    rawEl.textContent =
+      rawAlpha.toFixed(0) + " / " + rawBeta.toFixed(0) + " / " + rawGamma.toFixed(0);
+  }
+
   updateWheel();
+  sendAll();
 }
 
 // 设备运动（加速度）
@@ -364,18 +418,49 @@ window.addEventListener("load", function() {
   requestIosPermission();
 });
 
+// 校准按钮
+(function() {
+  var calBtn = document.getElementById("calBtn");
+  if (calBtn) calBtn.addEventListener("click", calibrate);
+})();
+
+// ---- 触屏油门/刹车（按住时递增；始终可用） ----
+var gasPressed = false, brakePressed = false;
+
+function pedalLoop() {
+  if (gasPressed) gas = clamp(gas + 0.08, 0, 1);
+  else if (brakePressed) brake = clamp(brake + 0.08, 0, 1);
+  else if (!gyroAvailable) {
+    gas = clamp(gas - 0.05, 0, 1);
+    brake = clamp(brake - 0.05, 0, 1);
+  }
+  updateWheel();
+  sendAll();
+}
+
+var gasEl = document.querySelector(".pedal.gas");
+var brakeEl = document.querySelector(".pedal.brake");
+if (gasEl) {
+  gasEl.addEventListener("pointerdown", function(e) { e.preventDefault(); gasPressed = true; brakePressed = false; });
+  gasEl.addEventListener("pointerup", function() { gasPressed = false; });
+  gasEl.addEventListener("pointercancel", function() { gasPressed = false; });
+}
+if (brakeEl) {
+  brakeEl.addEventListener("pointerdown", function(e) { e.preventDefault(); brakePressed = true; gasPressed = false; });
+  brakeEl.addEventListener("pointerup", function() { brakePressed = false; });
+  brakeEl.addEventListener("pointercancel", function() { brakePressed = false; });
+}
+
+setInterval(pedalLoop, 50);
+
 function updateWheel() {
-  // 方向盘：左右倾斜 = gamma（roll）→ 旋转角度
-  // 手机竖屏拿，左右倾斜时 gamma 变化
-  const steerDeg = clamp(roll, -45, 45);
+  const steerDeg = clamp(currentSteer, -45, 45);
   const wheel = document.getElementById("wheel");
   wheel.style.transform = "rotate(" + (-steerDeg) + "deg)";
-  document.getElementById("v_roll").textContent = roll.toFixed(1);
-  document.getElementById("v_pitch").textContent = pitch.toFixed(1);
+  document.getElementById("v_roll").textContent = currentSteer.toFixed(1);
+  document.getElementById("v_pitch").textContent = currentPitch.toFixed(1);
 
-  // 油门/刹车：前后倾斜 pitch
-  gas = clamp((pitch - 5) / 40, 0, 1);
-  brake = clamp((-pitch - 5) / 40, 0, 1);
+  // 油门/刹车由 pedalLoop / 倾斜控制，这里只更新显示
   document.getElementById("gasFill").style.height = (gas * 100) + "%";
   document.getElementById("brakeFill").style.height = (brake * 100) + "%";
 }

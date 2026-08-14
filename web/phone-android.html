@@ -186,8 +186,10 @@
     <div class="hub">STEER</div>
   </div>
   <div class="sensor-box">
-    <div class="sensor-row"><span>Roll (方向)</span><span id="v_roll">0.0</span></div>
-    <div class="sensor-row"><span>Pitch (油门/刹车)</span><span id="v_pitch">0.0</span></div>
+    <div class="sensor-row"><span>Steer (方向)</span><span id="v_roll">0.0</span></div>
+    <div class="sensor-row"><span>Tilt (油门/刹车)</span><span id="v_pitch">0.0</span></div>
+    <div class="sensor-row"><span>原始 α/β/γ</span><span id="v_raw">0 / 0 / 0</span></div>
+    <button id="calBtn" style="width:100%;margin-top:8px;padding:10px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:bold;">校准（以当前姿态为 0 点）</button>
   </div>
   <div class="pedals">
     <div class="pedal gas">
@@ -302,33 +304,69 @@ function setMode(m) {
 }
 
 // 传感器状态
+let rawAlpha = 0, rawBeta = 0, rawGamma = 0;
 let roll = 0, pitch = 0, yaw = 0;
 let accelX = 0, accelY = 0, accelZ = 0;
 let gas = 0, brake = 0;
 let gyroAvailable = false;
-let currentSteer = 0;   // 方向盘角度（陀螺仪或触屏）
-let currentPitch = 0;   // 俯仰（陀螺仪或触屏）
+let currentSteer = 0;   // 方向盘角度（校准后）
+let currentPitch = 0;   // 俯仰（校准后）
+let calOffset = { alpha: 0, beta: 0, gamma: 0, has: false };
 const buttons = { a: false, b: false, x: false, y: false };
 const dpad = { up: false, down: false, left: false, right: false };
 
+// 校准：以当前姿态为 0 点（记录偏移，发送相对值）
+function calibrate() {
+  if (!gyroAvailable) {
+    setStatus("陀螺仪不可用，无法校准（请使用 HTTPS）", false);
+    return;
+  }
+  calOffset = {
+    alpha: rawAlpha,
+    beta: rawBeta,
+    gamma: rawGamma,
+    has: true,
+  };
+  currentSteer = 0;
+  currentPitch = 0;
+  updateWheel();
+  sendAll();
+  setStatus("已校准：当前姿态为 0 点", true);
+}
+
 // 设备方向（陀螺仪）
 function handleOrientation(e) {
-  // 安卓坐标：
-  //   alpha  = 绕 Z 轴（指南针方向）
-  //   beta   = 绕 X 轴（前后倾斜）
-  //   gamma  = 绕 Y 轴（左右倾斜）
-  // 方向盘：左右倾斜用 gamma；油门/刹车：前后倾斜用 beta
   if (!gyroAvailable) {
     gyroAvailable = true;
-    setStatus(connected ? "已连接（陀螺仪可用）" : "自动连接中...", connected);
+    setStatus(connected ? "已连接（陀螺仪可用，可校准）" : "自动连接中...", connected);
   }
-  roll = e.gamma || 0;    // 左右倾斜（方向盘转向）
-  pitch = e.beta || 0;    // 前后倾斜（油门/刹车）
-  yaw = e.alpha || 0;
+  rawAlpha = e.alpha || 0;   // 绕 Z 轴（指南针）
+  rawBeta = e.beta || 0;     // 绕 X 轴（前后倾斜）
+  rawGamma = e.gamma || 0;   // 绕 Y 轴（左右倾斜）
+
+  // 校准偏移：发送值 = 原始值 - 校准偏移
+  var a = rawAlpha, b = rawBeta, g = rawGamma;
+  if (calOffset.has) {
+    a = rawAlpha - calOffset.alpha;
+    b = rawBeta - calOffset.beta;
+    g = rawGamma - calOffset.gamma;
+  }
+
+  // 方向轴：gamma 是左右倾斜（方向盘转向）；beta 是前后倾斜（油门/刹车）
+  yaw = a; roll = g; pitch = b;
   currentSteer = roll;
   currentPitch = pitch;
-  gas = clamp((pitch - 5) / 40, 0, 1);
-  brake = clamp((-pitch - 5) / 40, 0, 1);
+
+  // 前后倾斜 → 油门/刹车（仅当没有点按踏板时）
+  if (!gasPressed && !brakePressed) {
+    gas = clamp((pitch - 5) / 40, 0, 1);
+    brake = clamp((-pitch - 5) / 40, 0, 1);
+  }
+
+  // 显示原始值
+  document.getElementById("v_raw").textContent =
+    rawAlpha.toFixed(0) + " / " + rawBeta.toFixed(0) + " / " + rawGamma.toFixed(0);
+
   updateWheel();
   sendAll();
 }
@@ -348,12 +386,13 @@ function handleMotion(e) {
                   location.hostname === "localhost" ||
                   location.hostname === "127.0.0.1");
   if (!isSecure) {
-    setStatus(connected ? "已连接（触屏模式）" : "自动连接中...（触屏模式）", connected);
+    setStatus(connected ? "已连接（触屏模式，无陀螺仪）" : "自动连接中...（触屏模式）", connected);
   }
 })();
 
 window.addEventListener("deviceorientation", handleOrientation, true);
 window.addEventListener("devicemotion", handleMotion, true);
+document.getElementById("calBtn").addEventListener("click", calibrate);
 
 // ---- 触屏方向盘（非 HTTPS 降级） ----
 var wheelEl = document.getElementById("wheel");
@@ -382,29 +421,35 @@ window.addEventListener("pointermove", function(e) {
 window.addEventListener("pointerup", function() { wheelDrag = false; });
 window.addEventListener("pointercancel", function() { wheelDrag = false; });
 
-// ---- 触屏油门/刹车（按住时递增） ----
+// ---- 触屏油门/刹车（按住时递增；始终可用，不依赖陀螺仪） ----
 var gasPressed = false, brakePressed = false;
 
 function pedalLoop() {
-  if (!gyroAvailable) {
-    if (gasPressed) gas = clamp(gas + 0.08, 0, 1);
-    else if (brakePressed) brake = clamp(brake + 0.08, 0, 1);
-    else { gas = clamp(gas - 0.05, 0, 1); brake = clamp(brake - 0.05, 0, 1); }
-    updateWheel();
-    sendAll();
+  if (gasPressed) gas = clamp(gas + 0.08, 0, 1);
+  else if (brakePressed) brake = clamp(brake + 0.08, 0, 1);
+  else {
+    // 无点按时，若陀螺仪可用则由倾斜控制；否则自然回零
+    if (!gyroAvailable) {
+      gas = clamp(gas - 0.05, 0, 1);
+      brake = clamp(brake - 0.05, 0, 1);
+    }
   }
+  updateWheel();
+  sendAll();
 }
 
 document.querySelector(".pedal.gas").addEventListener("pointerdown", function(e) {
   e.preventDefault();
-  if (!gyroAvailable) { gasPressed = true; brakePressed = false; }
+  gasPressed = true; brakePressed = false;
 });
 document.querySelector(".pedal.gas").addEventListener("pointerup", function() { gasPressed = false; });
+document.querySelector(".pedal.gas").addEventListener("pointercancel", function() { gasPressed = false; });
 document.querySelector(".pedal.brake").addEventListener("pointerdown", function(e) {
   e.preventDefault();
-  if (!gyroAvailable) { brakePressed = true; gasPressed = false; }
+  brakePressed = true; gasPressed = false;
 });
 document.querySelector(".pedal.brake").addEventListener("pointerup", function() { brakePressed = false; });
+document.querySelector(".pedal.brake").addEventListener("pointercancel", function() { brakePressed = false; });
 
 setInterval(pedalLoop, 50);
 
