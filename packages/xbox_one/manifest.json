@@ -1,13 +1,23 @@
 {
-    "name": "CNX Xbox One",
-
-    "author": "CapabilityNexus",
-
-    "version": "1.0",
-
-    "description":
-    "Xbox One controller input package",
-
-    "type":
-    "input"
+  "name": "Microsoft Xbox One",
+  "author": "CapabilityNexus",
+  "version": "1.0",
+  "description": "Xbox One / Xbox One S controller over XInput (Windows)",
+  "type": "input",
+  "driver": "xinput",
+  "fingerprints": [
+    {
+      "type": "usb",
+      "vid": "045E",
+      "pid": "02D1"
+    },
+    {
+      "type": "usb",
+      "vid": "045E",
+      "pid": "02EA"
+    },
+    {
+      "type": "xinput"
+    }
+  ]
 }

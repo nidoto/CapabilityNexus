@@ -1,6 +1,5 @@
 {
     "devices": [
-
         {
             "name": "My ESP32 Custom Board",
             "driver": "serial",
@@ -21,7 +20,14 @@
                     "R": "motion.roll"
                 }
             }
+        },
+        {
+            "name": "New Device",
+            "driver": "xinput",
+            "package": "xbox_one",
+            "use_library": true,
+            "index": 0,
+            "library_id": "microsoft-xbox-one"
         }
-
     ]
 }

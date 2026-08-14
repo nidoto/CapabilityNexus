@@ -112,9 +112,76 @@ class CapabilityNexusGUI:
 
         self.device_tree.bind("<Double-1>", self._on_tree_double_click)
         self.device_tree.bind("<Return>", self._on_tree_double_click)
+        self.device_tree.bind("<Button-3>", self._on_tree_right_click)
+
+        btns = ttk.Frame(box)
+        btns.pack(fill=tk.X, padx=6, pady=4)
+        ttk.Button(btns, text=self.t("btn_remove_device"), command=self.remove_selected_device).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btns, text=self.t("btn_auto_route"), command=self.auto_route).pack(side=tk.LEFT, padx=2)
+
+        self.tree_menu = tk.Menu(self.root, tearoff=0)
+        self.tree_menu.add_command(label=self.t("btn_remove_device"), command=self.remove_selected_device)
+        self.tree_menu.add_command(label=self.t("btn_auto_route"), command=self.auto_route)
+        self.tree_menu.add_separator()
+        self.tree_menu.add_command(label=self.t("menu_refresh"), command=self.refresh_devices)
 
         hint = ttk.Label(box, text=self.t("tree_hint"))
         hint.pack(pady=4)
+
+    def _on_tree_right_click(self, event):
+        item = self.device_tree.identify_row(event.y)
+
+        if item:
+            self.device_tree.selection_set(item)
+
+        self.tree_menu.tk_popup(event.x_root, event.y_root)
+
+    def _find_device_node(self, item_id):
+        while item_id:
+            node = self.device_tree.item(item_id)
+            values = node.get("values", []) or []
+
+            if values and values[0] == "device":
+                return node.get("text")
+
+            item_id = self.device_tree.parent(item_id)
+
+        return None
+
+    def remove_selected_device(self):
+        selection = self.device_tree.selection()
+
+        if not selection:
+            self.log("Select a device to remove.")
+            return
+
+        device_text = self._find_device_node(selection[0])
+
+        if device_text is None:
+            self.log("Select a device node to remove.")
+            return
+
+        if not messagebox.askyesno("Remove Device", f"Remove '{device_text}'?"):
+            return
+
+        data = config_io.load_config()
+        devices = data.get("devices", [])
+
+        device = next(
+            (d for d in devices if device_text.startswith(d.get("name", ""))),
+            None,
+        )
+
+        if device is None:
+            self.log("Device not found in config.")
+            return
+
+        devices.remove(device)
+        data["devices"] = devices
+        config_io.save_config(data)
+
+        self.refresh_devices()
+        self.log(f"Removed device: {device.get('name')}")
 
     def _build_mapping_panel(self, parent):
         box = ttk.LabelFrame(parent, text=self.t("panel_mappings"))
@@ -575,12 +642,24 @@ class CapabilityNexusGUI:
                     field_vars["index"] = index_var
 
                     for slot in available:
-                        ttk.Radiobutton(
+                        radio = ttk.Radiobutton(
                             fields_frame,
                             text=f"Controller {slot}",
                             variable=index_var,
                             value=str(slot),
-                        ).pack(anchor=tk.W, padx=8, pady=2)
+                        )
+                        radio.pack(anchor=tk.W, padx=8, pady=2)
+
+                        def make_click(slot_value, rb):
+                            def on_click(_event):
+                                if index_var.get() == slot_value:
+                                    index_var.set("")
+                            return on_click
+
+                        radio.bind(
+                            "<Button-1>",
+                            make_click(str(slot), radio),
+                        )
 
                     index_var.set(str(available[0]))
                     show_bottom()
