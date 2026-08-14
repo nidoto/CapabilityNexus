@@ -79,6 +79,31 @@ OUTPUT_DEVICES = [
             "mouse_click_middle": "Middle Click",
         },
     ),
+    OutputDeviceInfo(
+        "virtual_ds4",
+        "Virtual PS4 (DualShock 4)",
+        "PS4 controller emulated via ViGEmBus",
+        {
+            "ds4.left_x": "Left Stick X",
+            "ds4.left_y": "Left Stick Y",
+            "ds4.right_x": "Right Stick X",
+            "ds4.right_y": "Right Stick Y",
+            "ds4.left_trigger": "Left Trigger",
+            "ds4.right_trigger": "Right Trigger",
+            "ds4.button_cross": "Cross",
+            "ds4.button_circle": "Circle",
+            "ds4.button_square": "Square",
+            "ds4.button_triangle": "Triangle",
+            "ds4.button_shoulder_left": "L1",
+            "ds4.button_shoulder_right": "R1",
+            "ds4.button_trigger_left": "L2",
+            "ds4.button_trigger_right": "R2",
+            "ds4.button_options": "Options",
+            "ds4.button_share": "Share",
+            "ds4.button_thumb_left": "Left Stick Press",
+            "ds4.button_thumb_right": "Right Stick Press",
+        },
+    ),
 ]
 
 

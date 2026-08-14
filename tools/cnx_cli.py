@@ -93,7 +93,7 @@ def cmd_add_device():
     print()
 
     name = ask("Device name", required=True)
-    driver = ask("Driver (serial/xinput/hid/ftms)", default="serial")
+    driver = ask("Driver (serial/xinput/hid/ftms/ant)", default="serial")
 
     if driver == "xinput":
         entry = {
@@ -124,6 +124,21 @@ def cmd_add_device():
 
         if address:
             entry["address"] = address
+    elif driver == "ant":
+        print()
+        print("ANT+ requires a USB ANT+ adapter (e.g. Garmin USB ANT Stick).")
+        device_type = ask(
+            "Device type (all/fe_c/power/speed)",
+            default="all",
+        )
+        package = ask("Capability package name", default="cycling")
+
+        entry = {
+            "name": name,
+            "driver": "ant",
+            "package": package,
+            "device_type": device_type,
+        }
     else:
         print()
         print("Connection types:")

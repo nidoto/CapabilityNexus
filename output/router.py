@@ -1,6 +1,7 @@
 from output.virtual_xinput import VirtualXInput
 from output.virtual_keyboard import VirtualKeyboard
 from output.virtual_mouse import VirtualMouse
+from output.virtual_ds4 import VirtualDS4
 from output.real_xinput import RealXInputOutput
 
 
@@ -10,6 +11,7 @@ class OutputRouter:
     # target 前缀 → 输出后端
     # key_*            → 虚拟键盘
     # mouse_*          → 虚拟鼠标
+    # ds4.*            → 虚拟 PS4 (DualShock 4)
     # xbox.*           → 真实 Xbox One（震动马达等）
     # 其他（摇杆/按钮） → 虚拟 x360 手柄
     #
@@ -17,6 +19,7 @@ class OutputRouter:
     PREFIX_BACKENDS = {
         "key_": VirtualKeyboard,
         "mouse_": VirtualMouse,
+        "ds4.": VirtualDS4,
         "xbox.": RealXInputOutput,
     }
 

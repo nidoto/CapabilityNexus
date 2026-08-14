@@ -147,6 +147,16 @@ class DeviceManager:
             device.connect()
             return device
 
+        if driver == "ant":
+            from devices.ant_device import ANTDevice
+
+            device = ANTDevice(
+                self.event_bus,
+                device_type=entry.get("device_type", "all"),
+            )
+            device.connect()
+            return device
+
         if driver == "serial":
             from devices.connection_factory import ConnectionFactory
             from protocols.serial_protocol import SerialParser
