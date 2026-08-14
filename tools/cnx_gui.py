@@ -451,15 +451,46 @@ class CapabilityNexusGUI:
         ttk.Label(dialog, text=self.t("dlg_output_device")).pack(padx=8, pady=(10, 2))
 
         from output.devices import OUTPUT_DEVICES
+        from tools.config_io import load_outputs
 
-        device_var = tk.StringVar(value="virtual_x360")
+        enabled_outputs = load_outputs().get("outputs", [])
 
-        for device in OUTPUT_DEVICES:
+        # 类型 -> 注册表能力
+        type_to_info = {
+            "xinput": next((d for d in OUTPUT_DEVICES if d.id == "virtual_x360"), None),
+            "ds4": next((d for d in OUTPUT_DEVICES if d.id == "virtual_ds4"), None),
+            "keyboard": next((d for d in OUTPUT_DEVICES if d.id == "virtual_keyboard"), None),
+            "mouse": next((d for d in OUTPUT_DEVICES if d.id == "virtual_mouse"), None),
+        }
+
+        if not enabled_outputs:
+            ttk.Label(
+                dialog,
+                text="(no output devices added - add one in the Output Devices tab)",
+                foreground="#c0392b",
+            ).pack(anchor=tk.W, padx=16)
+            ttk.Button(dialog, text=self.t("dlg_apply"), command=dialog.destroy).pack(padx=8, pady=10)
+            return
+
+        device_var = tk.StringVar()
+
+        for entry in enabled_outputs:
+            out_id = entry.get("id")
+            out_type = entry.get("type")
+            out_name = entry.get("name", out_id)
+
+            info = type_to_info.get(out_type)
+
+            if info:
+                label = f"{out_name}  [{info.name}]"
+            else:
+                label = out_name
+
             ttk.Radiobutton(
                 dialog,
-                text=f"{device.name}  ({device.description})",
+                text=label,
                 variable=device_var,
-                value=device.id,
+                value=out_id,
             ).pack(anchor=tk.W, padx=16)
 
         ttk.Label(dialog, text=self.t("dlg_output_function")).pack(padx=8, pady=(10, 2))
@@ -474,13 +505,19 @@ class CapabilityNexusGUI:
 
         self._device_targets = {}
 
-        def update_targets(*_args):
-            device_id = device_var.get()
-            device = next((d for d in OUTPUT_DEVICES if d.id == device_id), None)
+        def get_entry_info(out_id):
+            entry = next((e for e in enabled_outputs if e.get("id") == out_id), None)
+            if not entry:
+                return None
+            return type_to_info.get(entry.get("type"))
 
-            if device:
-                self._device_targets = device.targets
-                target_combo["values"] = list(device.targets.keys())
+        def update_targets(*_args):
+            out_id = device_var.get()
+            info = get_entry_info(out_id)
+
+            if info:
+                self._device_targets = info.targets
+                target_combo["values"] = list(info.targets.keys())
 
                 if current:
                     if isinstance(current, list):
@@ -490,12 +527,15 @@ class CapabilityNexusGUI:
                     else:
                         tgt = current.get("target")
 
-                    if tgt in device.targets:
+                    if tgt in info.targets:
                         target_var.set(tgt)
                         return
 
-                if device.targets:
-                    target_var.set(list(device.targets.keys())[0])
+                if info.targets:
+                    target_var.set(list(info.targets.keys())[0])
+
+        if enabled_outputs:
+            device_var.set(enabled_outputs[0]["id"])
 
         for rb in dialog.winfo_children():
             if isinstance(rb, ttk.Radiobutton):
