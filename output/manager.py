@@ -93,8 +93,8 @@ class OutputDeviceManager:
 
         return self._instances
 
-    def get_instance(self, output_id):
-        return self._instances.get(output_id)
+    def get_instances(self):
+        return self._instances
 
     def close_all(self):
         for instance in self._instances.values():
