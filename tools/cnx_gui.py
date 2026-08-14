@@ -147,6 +147,34 @@ class CapabilityNexusGUI:
         hint = ttk.Label(box, text=self.t("tree_hint"))
         hint.pack(pady=4)
 
+        self._build_input_monitor(box)
+
+    def _build_input_monitor(self, parent):
+        mon = ttk.LabelFrame(parent, text=self.t("mon_input"))
+        mon.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
+
+        self.input_monitor = tk.Text(mon, height=6, state=tk.DISABLED)
+        self.input_monitor.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+    def _build_output_monitor(self, parent):
+        mon = ttk.LabelFrame(parent, text=self.t("mon_output"))
+        mon.pack(fill=tk.BOTH, expand=True, padx=6, pady=(0, 6))
+
+        self.output_monitor = tk.Text(mon, height=6, state=tk.DISABLED)
+        self.output_monitor.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+    def _append_monitor(self, widget, text):
+        widget.config(state=tk.NORMAL)
+        widget.insert(tk.END, text + "\n")
+        widget.see(tk.END)
+
+        # 限制行数
+        lines = int(widget.index("end-1c").split(".")[0])
+        if lines > 50:
+            widget.delete("1.0", f"{lines - 40}.0")
+
+        widget.config(state=tk.DISABLED)
+
     def _on_tree_right_click(self, event):
         item = self.device_tree.identify_row(event.y)
 
@@ -222,6 +250,8 @@ class CapabilityNexusGUI:
 
         hint = ttk.Label(box, text=self.t("tree_output_hint"))
         hint.pack(pady=4)
+
+        self._build_output_monitor(box)
 
         self.refresh_outputs()
 
@@ -1467,6 +1497,47 @@ class CapabilityNexusGUI:
         self.app = None
         self.log("Engine stopped.")
 
+    def _capability_category(self, cap_id):
+        if not hasattr(self, "_cat_map"):
+            self._cat_map = {}
+
+            packages = config_io.list_package_capabilities()
+            for info in packages.values():
+                for cap in info.get("capabilities_full", []):
+                    self._cat_map[cap.get("id")] = cap.get("category", "axis")
+                for cap in info.get("outputs_full", []):
+                    self._cat_map[cap.get("id")] = cap.get("category", "motor")
+
+            # 输出目标（虚拟设备功能）类别
+            from output.devices import OUTPUT_DEVICES
+
+            for device in OUTPUT_DEVICES:
+                for target in device.targets:
+                    if target.startswith("button_") or target.startswith("ds4.button"):
+                        self._cat_map[target] = "button"
+                    elif "trigger" in target:
+                        self._cat_map[target] = "trigger"
+                    else:
+                        self._cat_map[target] = "axis"
+
+        return self._cat_map.get(cap_id, "axis")
+
+    def _format_input(self, cap_id, value):
+        category = self._capability_category(cap_id)
+
+        if category == "button":
+            return f"{cap_id}: 按下" if value else f"{cap_id}: 释放"
+
+        return f"{cap_id}: {value:.2f}"
+
+    def _format_output(self, target, value):
+        category = self._capability_category(target)
+
+        if category == "button":
+            return f"{target}: 按下" if value else f"{target}: 释放"
+
+        return f"{target}: {value:.2f}"
+
     def _refresh_live_values(self):
         if self.app is None or not hasattr(self.app, "status_monitor"):
             return
@@ -1476,42 +1547,35 @@ class CapabilityNexusGUI:
         inputs = monitor.snapshot_inputs()
         outputs = monitor.snapshot_outputs()
 
-        # 更新输入设备树：名称后附加实时值
-        for item in self._iter_tree():
-            node = self.device_tree.item(item)
-            tags = node.get("tags", [])
+        # 输入监控窗口
+        input_lines = []
+        for cap_id, value in inputs.items():
+            if "button" in self._capability_category(cap_id):
+                if value:
+                    input_lines.append(self._format_input(cap_id, value))
+            else:
+                input_lines.append(self._format_input(cap_id, value))
 
-            if "capability" in tags:
-                cap_id = node.get("text")
-                value = inputs.get(cap_id)
+        if input_lines:
+            self.input_monitor.config(state=tk.NORMAL)
+            self.input_monitor.delete("1.0", tk.END)
+            self.input_monitor.insert(tk.END, "\n".join(input_lines))
+            self.input_monitor.config(state=tk.DISABLED)
 
-                if value is not None:
-                    base = cap_id
-                    if " [" in node.get("text"):
-                        base = node.get("text").split(" [")[0]
-                    self.device_tree.item(item, text=f"{base} [{value:.2f}]")
+        # 输出监控窗口
+        output_lines = []
+        for target, value in outputs.items():
+            if "button" in self._capability_category(target):
+                if value:
+                    output_lines.append(self._format_output(target, value))
+            else:
+                output_lines.append(self._format_output(target, value))
 
-        # 更新输出设备树
-        for item in self._iter_output_tree():
-            node = self.output_tree.item(item)
-            tags = node.get("tags", [])
-
-            if "output_function" in tags:
-                text = node.get("text")
-                target = text.split("  (")[0]
-                value = outputs.get(target)
-
-                if value is not None:
-                    base = text.split(" [")[0]
-                    self.device_tree_values = None
-                    self.output_tree.item(item, text=f"{base} [{value:.2f}]")
-
-    def _iter_output_tree(self, parent=""):
-        items = []
-        for item in self.output_tree.get_children(parent):
-            items.append(item)
-            items.extend(self._iter_output_tree(item))
-        return items
+        if output_lines:
+            self.output_monitor.config(state=tk.NORMAL)
+            self.output_monitor.delete("1.0", tk.END)
+            self.output_monitor.insert(tk.END, "\n".join(output_lines))
+            self.output_monitor.config(state=tk.DISABLED)
 
     #
     # Log
