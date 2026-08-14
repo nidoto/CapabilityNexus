@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools import config_io
 from tools.i18n import I18n
+from tools.theme import apply_theme, Theme
 
 
 class CapabilityNexusGUI:
@@ -15,6 +16,8 @@ class CapabilityNexusGUI:
     def __init__(self, root):
         self.root = root
         self.i18n = I18n("zh")
+
+        apply_theme(self.root)
 
         self.root.title(self.t("app_title"))
         self.root.geometry("1000x650")
@@ -121,6 +124,15 @@ class CapabilityNexusGUI:
         box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         self.map_text = tk.Text(box, state=tk.DISABLED)
+        self.map_text.configure(
+            bg=Theme.c("bg_panel"),
+            fg=Theme.c("fg"),
+            insertbackground=Theme.c("fg"),
+            font=Theme.FONT["mono"],
+            relief=tk.FLAT,
+            padx=6,
+            pady=6,
+        )
         self.map_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
         btns = ttk.Frame(box)
@@ -132,6 +144,15 @@ class CapabilityNexusGUI:
         logbox.pack(fill=tk.X, padx=8, pady=(0, 8))
 
         self.log_text = tk.Text(logbox, height=6, state=tk.DISABLED)
+        self.log_text.configure(
+            bg=Theme.c("bg_panel"),
+            fg=Theme.c("fg_dim"),
+            insertbackground=Theme.c("fg"),
+            font=Theme.FONT["mono"],
+            relief=tk.FLAT,
+            padx=6,
+            pady=4,
+        )
         self.log_text.pack(fill=tk.X, padx=6, pady=6)
 
     #
@@ -143,6 +164,8 @@ class CapabilityNexusGUI:
 
         data = config_io.load_config()
         packages = config_io.list_package_capabilities()
+        profile = config_io.load_profile()
+        mapped = set(profile.get("mappings", {}).keys())
 
         for device in data.get("devices", []):
             name = device.get("name", "?")
@@ -154,6 +177,7 @@ class CapabilityNexusGUI:
                 tk.END,
                 text=f"{name}  [{conn}]",
                 values=("device",),
+                tags=("device",),
                 open=True,
             )
 
@@ -175,11 +199,14 @@ class CapabilityNexusGUI:
                 )
 
                 for cap in inputs:
+                    cap_id = cap.get("id", cap)
+
                     self.device_tree.insert(
                         input_node,
                         tk.END,
-                        text=cap.get("id", cap),
+                        text=cap_id,
                         values=("capability",),
+                        tags=("mapped",) if cap_id in mapped else (),
                     )
 
             if outputs:
@@ -192,12 +219,18 @@ class CapabilityNexusGUI:
                 )
 
                 for cap in outputs:
+                    cap_id = cap.get("id", cap)
+
                     self.device_tree.insert(
                         output_node,
                         tk.END,
-                        text=cap.get("id", cap),
+                        text=cap_id,
                         values=("capability",),
+                        tags=("mapped",) if cap_id in mapped else (),
                     )
+
+        self.device_tree.tag_configure("mapped", foreground=Theme.c("success"))
+        self.device_tree.tag_configure("device", foreground=Theme.c("fg_bright"))
 
         self.refresh_mappings()
 
