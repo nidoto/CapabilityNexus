@@ -72,13 +72,38 @@ class CapabilityNexusGUI:
             return
 
         details = "\n".join(f"- {item}" for item in missing)
-        message = (
-            "CapabilityNexus 依赖检查发现以下组件未安装：\n\n"
-            f"{details}\n\n"
-            "XInput 兼容控制器输出或游戏独占模式可能无法使用。"
-        )
+
+        # 区分：驱动缺失（可在客户端内装）vs Python 包缺失（需 pip）
+        driver_missing = []
+        python_missing = []
+        for item in missing:
+            if "ViGEmBus" in item or "HidHide" in item:
+                driver_missing.append(item)
+            else:
+                python_missing.append(item)
+
+        lines = ["CapabilityNexus 依赖检查发现以下组件未安装：", "", details, ""]
+
+        can_fix_in_app = bool(driver_missing)
+        if can_fix_in_app:
+            lines.append("驱动可以通过 系统 > 驱动管理 一键安装。")
+
+        if python_missing:
+            lines.append("Python 包需要通过 pip 安装：")
+            lines.append("  py -3 -m pip install -r requirements.txt")
+
+        message = "\n".join(lines)
         self.log("Missing runtime dependencies: " + ", ".join(missing))
-        messagebox.showwarning("运行依赖缺失", message)
+
+        if can_fix_in_app:
+            answer = messagebox.askyesno(
+                self.t("menu_drivers"),
+                message + "\n\n" + self.t("drivers_open_manager_ask"),
+            )
+            if answer:
+                self.show_drivers()
+        else:
+            messagebox.showwarning(self.t("menu_drivers"), message)
 
     def _start_monitor_loop(self):
         self._monitor_job = self.root.after(200, self._monitor_tick)

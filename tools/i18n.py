@@ -157,6 +157,7 @@ STRINGS = {
         "drivers_vg_installed_ok": "ViGEmBus 已安装。可能需要重启电脑。",
         "drivers_vg_uninstall_ask": "确定卸载 ViGEmBus 驱动？",
         "drivers_hh_uninstall_ask": "确定卸载 HidHide？卸载后游戏独占模式将不可用。",
+        "drivers_open_manager_ask": "要现在打开驱动管理并安装缺失的驱动吗？",
     },
     "en": {
         "app_title": "CapabilityNexus",
@@ -311,6 +312,7 @@ STRINGS = {
         "drivers_vg_installed_ok": "ViGEmBus installed. A reboot may be required.",
         "drivers_vg_uninstall_ask": "Uninstall the ViGEmBus driver?",
         "drivers_hh_uninstall_ask": "Uninstall HidHide? Game-exclusive mode will stop working.",
+        "drivers_open_manager_ask": "Open Driver Management now to install the missing drivers?",
     },
 }
 

@@ -102,6 +102,12 @@ boundaries and product documentation.
     mapping -> OutputEvent)
   - Run with `py -3 -m pytest`; pytest is a dev dependency in requirements.txt
   - Tests excluded from the release build
+- One-step dependency guidance
+  - `install_drivers.cmd` now detects installed state (sc/reg query) and skips
+    already-present drivers; it reports a reboot recommendation and a summary
+  - The startup dependency check distinguishes driver vs Python-package gaps:
+    missing drivers offer to open Driver Management (System > Driver
+    Management) from the warning dialog
 
 ## ESP32 Boundary
 
