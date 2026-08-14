@@ -105,13 +105,4 @@ class MappingEngine:
             value,
         )
 
-        print(
-            "[Mapping]",
-            source,
-            "->",
-            target,
-            "gain=",
-            gain,
-        )
-
         self.event_bus.publish(event)

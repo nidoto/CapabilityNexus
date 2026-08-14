@@ -1,3 +1,5 @@
+import os
+
 print(
     "CapabilityNexus V1"
 )
@@ -237,6 +239,15 @@ from mapping.transform import TransformLayer
 transform_layer = TransformLayer(
     event_bus
 )
+
+
+if os.path.exists(
+    "config/transforms.json"
+):
+
+    transform_layer.load(
+        "config/transforms.json"
+    )
 
 
 def transform_receive(

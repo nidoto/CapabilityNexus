@@ -4,10 +4,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tools import config_io
 
-CONFIG_PATH = os.path.join("config", "devices.json")
-PACKAGES_PATH = os.path.join("packages")
-PROFILE_PATH = os.path.join("profiles", "default.json")
+
+CONFIG_PATH = config_io.CONFIG_PATH
+PACKAGES_PATH = config_io.PACKAGES_PATH
+PROFILE_PATH = config_io.PROFILE_PATH
 
 
 def ask(prompt, default=None, required=False):
@@ -47,16 +49,11 @@ def ask_number(prompt, default=None):
 
 
 def load_config():
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"devices": []}
+    return config_io.load_config()
 
 
 def save_config(data):
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    config_io.save_config(data)
 
 
 def ask_serial_protocol():
@@ -308,32 +305,20 @@ REAL_TARGETS = {
 
 
 def load_profile():
-    if os.path.exists(PROFILE_PATH):
-        with open(PROFILE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"mappings": {}}
+    return config_io.load_profile()
 
 
 def save_profile(data):
-    os.makedirs(os.path.dirname(PROFILE_PATH), exist_ok=True)
-    with open(PROFILE_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    config_io.save_profile(data)
 
 
 def list_package_capabilities():
-    packages = {}
+    raw = config_io.list_package_capabilities()
 
-    if os.path.exists(PACKAGES_PATH):
-        for name in os.listdir(PACKAGES_PATH):
-            cap_path = os.path.join(PACKAGES_PATH, name, "capabilities.json")
-            if os.path.exists(cap_path):
-                with open(cap_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                packages[name] = [
-                    c["id"] for c in data.get("capabilities", [])
-                ]
-
-    return packages
+    return {
+        name: info["capabilities"]
+        for name, info in raw.items()
+    }
 
 
 def cmd_map_capability():
@@ -410,21 +395,7 @@ def cmd_map_capability():
 
 
 def _mapping_desc(mapping):
-    if isinstance(mapping, str):
-        return mapping
-
-    if isinstance(mapping, list):
-        return "; ".join(_mapping_desc(m) for m in mapping)
-
-    target = mapping.get("target", "?")
-    parts = [target]
-
-    if mapping.get("gain") not in (None, 1.0):
-        parts.append(f"gain={mapping['gain']}")
-    if mapping.get("return_to_center"):
-        parts.append("return_to_center")
-
-    return " ".join(parts)
+    return config_io.mapping_desc(mapping)
 
 
 def cmd_list_mappings():

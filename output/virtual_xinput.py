@@ -308,11 +308,6 @@ class VirtualXInput(OutputDevice):
             )
 
 
-        print(
-            f"[XInput] {target} = {value} -> ({x:.3f}, {y:.3f})"
-        )
-
-
     def _update_trigger(
         self,
         target,
@@ -338,11 +333,6 @@ class VirtualXInput(OutputDevice):
             )(
                 normalized
             )
-
-
-        print(
-            f"[XInput] {target} = {value} -> {normalized:.3f}"
-        )
 
 
     def _update_button(
@@ -378,11 +368,6 @@ class VirtualXInput(OutputDevice):
                 self._gamepad.release_button(
                     vg_button
                 )
-
-
-        print(
-            f"[XInput] {target} = {pressed}"
-        )
 
 
     def update(

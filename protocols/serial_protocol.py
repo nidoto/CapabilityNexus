@@ -44,11 +44,6 @@ class SerialParser:
             value=value
         )
 
-        print(
-            "[StreamData]",
-            stream
-        )
-
         self.event_bus.publish(stream)
 
     def _on_frame(self, line):
@@ -66,8 +61,3 @@ class SerialParser:
 
         self.last_frame = frame
         self.frame = frame
-
-        print(
-            "[Frame]",
-            frame
-        )

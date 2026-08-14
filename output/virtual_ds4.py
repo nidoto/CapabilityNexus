@@ -118,7 +118,6 @@ class VirtualDS4(OutputDevice):
         if self._real:
             getattr(self._gamepad, f"{side}_joystick_float")(x, y)
 
-        print(f"[DS4] {target} = {value} -> ({x:.3f}, {y:.3f})")
 
     def _update_trigger(self, target, value):
         normalized = self._normalize_trigger(value)
@@ -129,7 +128,6 @@ class VirtualDS4(OutputDevice):
         if self._real:
             getattr(self._gamepad, f"{side}_trigger_float")(normalized)
 
-        print(f"[DS4] {target} = {value} -> {normalized:.3f}")
 
     def _update_button(self, target, value):
         pressed = bool(value)
@@ -145,7 +143,6 @@ class VirtualDS4(OutputDevice):
             else:
                 self._gamepad.release_button(vg_button)
 
-        print(f"[DS4] {target} = {pressed}")
 
     def update(self):
         if self._real:

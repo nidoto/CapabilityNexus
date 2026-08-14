@@ -1,83 +1,22 @@
 class EventBus:
 
-
-    def __init__(self):
-
+    def __init__(self, debug=False):
         self.subscribers = []
+        self.debug = debug
 
+    def subscribe(self, event_type, callback):
+        self.subscribers.append((event_type, callback))
 
+        if self.debug:
+            print("[EventBus Subscribe]", event_type, callback)
 
-    def subscribe(
-        self,
-        event_type,
-        callback
-    ):
-
-
-        print(
-
-            "[EventBus Subscribe]",
-
-            event_type,
-
-            callback
-
-        )
-
-
-        self.subscribers.append(
-
-            (
-                event_type,
-                callback
-            )
-
-        )
-
-
-
-    def publish(
-        self,
-        event
-    ):
-
-
-        print(
-
-            "[EventBus Publish]",
-
-            type(event)
-
-        )
-
+    def publish(self, event):
+        if self.debug:
+            print("[EventBus Publish]", type(event))
 
         for registered_type, callback in self.subscribers:
-
-
-            print(
-
-                "[EventBus Check]",
-
-                registered_type,
-
-                callback
-
-            )
-
-
-            if isinstance(
-                event,
-                registered_type
-            ):
-
-
-                print(
-
-                    "[EventBus Call]",
-
-                    callback
-
-                )
-
+            if isinstance(event, registered_type):
+                if self.debug:
+                    print("[EventBus Call]", callback)
 
                 callback(event)
