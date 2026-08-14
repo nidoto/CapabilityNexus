@@ -156,6 +156,10 @@ boundaries and product documentation.
     capabilities registered
   - Verified end-to-end: phone WS -> phone.roll/gas/button_a -> mapping ->
     virtual XInput output (steering/trigger/button all routed)
+  - Platform-aware pages: `web/index.html` detects the device (iOS / iPadOS /
+    Android / other) and redirects to `phone-ios.html` (needs HTTPS + user
+    gesture permission + gamma sign correction) or `phone-android.html`
+    (HTTP LAN works directly)
   - Roadmap: Bluetooth transport, then a native Android app
 
 ## ESP32 Boundary

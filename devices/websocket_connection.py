@@ -78,8 +78,17 @@ class WebSocketServerConnection(LineConnection):
         if path in ("/ws", "/phone"):
             return None
 
-        if path in ("/", "/index.html", "/phone.html"):
-            page = os.path.join(WEB_DIR, "phone.html")
+        # 页面分发：入口页检测平台后跳转
+        page_map = {
+            "/": "index.html",
+            "/index.html": "index.html",
+            "/phone.html": "index.html",
+            "/phone-android.html": "phone-android.html",
+            "/phone-ios.html": "phone-ios.html",
+        }
+
+        if path in page_map:
+            page = os.path.join(WEB_DIR, page_map[path])
             if os.path.exists(page):
                 with open(page, "r", encoding="utf-8") as f:
                     body = f.read().encode("utf-8")

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CapabilityNexus Phone</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .box {
+    text-align: center;
+    padding: 30px;
+  }
+  .logo {
+    font-size: 24px;
+    font-weight: bold;
+    color: #38bdf8;
+    margin-bottom: 10px;
+  }
+  .status {
+    color: #94a3b8;
+    font-size: 14px;
+    margin-top: 12px;
+  }
+  .loader {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    border: 3px solid #334155;
+    border-top-color: #38bdf8;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-top: 18px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color: #f87171; font-size: 14px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">CapabilityNexus</div>
+  <div>检测平台并进入控制页面...</div>
+  <div class="loader"></div>
+  <div class="status" id="status">Detecting...</div>
+</div>
+
+<script>
+(function() {
+  var ua = navigator.userAgent;
+  var platform = navigator.platform || "";
+  var isIOS = /iPad|iPhone|iPod/.test(ua) ||
+              (platform === "MacIntel" && navigator.maxTouchPoints > 1); // iPadOS 伪装成 Mac
+  var isAndroid = /Android/.test(ua);
+  var isIPad = /iPad/.test(ua) || (platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+  var status = document.getElementById("status");
+  var target;
+
+  if (isIOS) {
+    target = "phone-ios.html";
+    status.textContent = "iOS 设备 → iOS 页面";
+  } else if (isIPad) {
+    target = "phone-ios.html"; // iPadOS 用 iOS 页面（需 HTTPS 授权）
+    status.textContent = "iPadOS 设备 → iOS 页面";
+  } else if (isAndroid) {
+    target = "phone-android.html";
+    status.textContent = "Android 设备 → Android 页面";
+  } else {
+    // 桌面或未知 → 用通用安卓页面（HTTP 可用）
+    target = "phone-android.html";
+    status.textContent = "其他设备 → 通用页面";
+  }
+
+  setTimeout(function() {
+    window.location.href = target;
+  }, 800);
+})();
+</script>
+</body>
+</html>
