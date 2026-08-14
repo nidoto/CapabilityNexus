@@ -120,6 +120,42 @@ class DeviceLibrary:
             self.refresh()
         return self._devices or []
 
+    def search(self, query):
+        if self._devices is None:
+            self.refresh()
+
+        query = (query or "").lower()
+        results = []
+
+        for device in self._devices:
+            name = (device.get("name") or "").lower()
+            device_id = (device.get("id") or "").lower()
+
+            if query in name or query in device_id:
+                results.append(device)
+
+        return results
+
+    def install(self, device_id, packages_path="packages", config_path="config/devices.json"):
+        downloaded = self.download_device(device_id)
+
+        if downloaded is None:
+            return None
+
+        package = downloaded.get("package")
+        package_dir = os.path.join(packages_path, package)
+        os.makedirs(package_dir, exist_ok=True)
+
+        with open(os.path.join(package_dir, "manifest.json"), "w", encoding="utf-8") as f:
+            json.dump(downloaded.get("manifest", {}), f, ensure_ascii=False, indent=2)
+
+        capabilities = downloaded.get("capabilities")
+        if capabilities:
+            with open(os.path.join(package_dir, "capabilities.json"), "w", encoding="utf-8") as f:
+                json.dump(capabilities, f, ensure_ascii=False, indent=2)
+
+        return downloaded
+
     def _file_url(self, device_id, filename):
         if os.path.exists(self.library_url):
             return os.path.join(

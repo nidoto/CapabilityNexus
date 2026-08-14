@@ -503,6 +503,34 @@ def cmd_list_library():
     print("Install one with:  python tools/cnx_cli.py install-device <id>")
 
 
+def cmd_library_search():
+    if len(sys.argv) < 3:
+        print("Usage: python tools/cnx_cli.py library-search <keyword>")
+        return
+
+    query = sys.argv[2]
+
+    print(f"=== Search Library: {query} ===")
+    print()
+
+    library = _make_library()
+    library.refresh()
+
+    results = library.search(query)
+
+    if not results:
+        print("  (no matches)")
+        return
+
+    for device in results:
+        kind = device.get("kind", "?")
+        name = device.get("name", device.get("id"))
+        print(f"  [{kind:8s}] {device.get('id'):25s} {name}")
+
+    print()
+    print("Install one with:  python tools/cnx_cli.py install-device <id>")
+
+
 def cmd_install_device():
     if len(sys.argv) < 3:
         print("Usage: python tools/cnx_cli.py install-device <device_id>")
@@ -689,6 +717,7 @@ def main():
         print("  python tools/cnx_cli.py remove-mapping   Remove a mapping")
         print("  python tools/cnx_cli.py list-mappings    Show current mappings + unmapped")
         print("  python tools/cnx_cli.py list-library     List devices in the GitHub library")
+        print("  python tools/cnx_cli.py library-search <kw>   Search the device library")
         print("  python tools/cnx_cli.py install-device <id>   Install a device from the library")
         print("  python tools/cnx_cli.py list-available   List configured devices")
         print("  python tools/cnx_cli.py remove-device    Remove a configured device")
@@ -710,6 +739,8 @@ def main():
         cmd_list_mappings()
     elif cmd == "list-library":
         cmd_list_library()
+    elif cmd == "library-search":
+        cmd_library_search()
     elif cmd == "install-device":
         cmd_install_device()
     elif cmd == "list-available":

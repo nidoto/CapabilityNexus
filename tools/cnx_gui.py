@@ -645,6 +645,39 @@ class CapabilityNexusGUI:
                 entry["index"] = int(field_vars["index"].get() or 0)
 
             data = config_io.load_config()
+
+            if use_library_var.get():
+                try:
+                    from devices.device_library import DeviceLibrary
+
+                    library = DeviceLibrary(
+                        cache_path=os.path.join("config", "device_library_cache.json"),
+                    )
+                    library.refresh()
+
+                    fingerprint = None
+                    if conn_key == "serial":
+                        fingerprint = {
+                            "type": "serial",
+                            "vid": field_vars["port"].get(),
+                        }
+                    elif conn_key == "xinput":
+                        fingerprint = {"type": "xinput"}
+
+                    detected = {"fingerprint": fingerprint or {}}
+                    matched = library.identify(detected) if fingerprint else None
+
+                    if matched:
+                        library.install(
+                            matched.get("id"),
+                            packages_path=config_io.PACKAGES_PATH,
+                        )
+                        entry["package"] = matched.get("package", entry.get("package"))
+                        entry["library_id"] = matched.get("id")
+                        self.log(f"Library match: {matched.get('name')}")
+                except Exception as e:
+                    self.log(f"Library lookup failed: {e}")
+
             data["devices"].append(entry)
             config_io.save_config(data)
 
