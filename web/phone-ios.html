@@ -37,6 +37,37 @@
     color: #fff;
     font-weight: bold;
   }
+  .top button#fullscreenBtn, .top button#lockBtn {
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+  #lockOverlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999;
+    background: rgba(15, 23, 42, 0.92);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  #lockOverlay.on { display: flex; }
+  #lockOverlay .lock-info {
+    color: #94a3b8;
+    font-size: 14px;
+    margin-bottom: 24px;
+    text-align: center;
+    line-height: 1.6;
+  }
+  #unlockBtn {
+    padding: 16px 32px;
+    border: none;
+    border-radius: 12px;
+    background: #22c55e;
+    color: #fff;
+    font-size: 18px;
+    font-weight: bold;
+  }
   .status {
     padding: 8px 14px;
     font-size: 13px;
@@ -170,9 +201,17 @@
 <div class="top">
   <input id="addr" type="text" value="" placeholder="自动使用当前地址（也可手动填 ws://PC-IP:8765/ws）">
   <button id="connectBtn">连接</button>
+  <button id="fullscreenBtn">⛶</button>
+  <button id="lockBtn">🔒</button>
 </div>
 
 <div class="status" id="status">未连接</div>
+
+<!-- 锁定遮罩：锁定后除解锁按钮外全屏不可触控 -->
+<div id="lockOverlay">
+  <div class="lock-info">已锁定，防止误触<br>点击下方解锁</div>
+  <button id="unlockBtn">🔓 解锁</button>
+</div>
 
 <div class="mode-row">
   <button id="modeWheel" class="active">方向盘</button>
@@ -236,6 +275,35 @@ function setStatus(text, ok) {
   statusEl.textContent = text;
   statusEl.className = "status " + (ok ? "ok" : "err");
 }
+
+// ---- 全屏 ----
+var fullscreenBtn = document.getElementById("fullscreenBtn");
+fullscreenBtn.addEventListener("click", function() {
+  var doc = document.documentElement;
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    (doc.requestFullscreen || doc.webkitRequestFullscreen || function() {}).call(doc);
+  } else {
+    (document.exitFullscreen || document.webkitExitFullscreen || function() {}).call(document);
+  }
+});
+
+// ---- 锁定（防误触） ----
+var lockOverlay = document.getElementById("lockOverlay");
+var lockBtn = document.getElementById("lockBtn");
+var unlockBtn = document.getElementById("unlockBtn");
+var locked = false;
+
+function setLocked(state) {
+  locked = state;
+  lockOverlay.classList.toggle("on", state);
+  lockBtn.textContent = state ? "🔓" : "🔒";
+}
+
+lockBtn.addEventListener("click", function() { setLocked(true); });
+unlockBtn.addEventListener("click", function() { setLocked(false); });
+
+lockOverlay.addEventListener("touchstart", function(e) { if (locked) e.preventDefault(); }, { passive: false });
+lockOverlay.addEventListener("pointerdown", function(e) { if (locked) e.preventDefault(); }, { passive: false });
 
 let autoReconnect = true;
 
