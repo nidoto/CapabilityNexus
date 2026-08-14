@@ -3,6 +3,8 @@ from output.base import OutputDevice
 
 class VirtualDS4(OutputDevice):
 
+    output_type = "ds4"
+
     #
     # 虚拟 PS4 (DualShock 4) 输出设备
     # 通过 vgamepad VDS4Gamepad（ViGEmBus）

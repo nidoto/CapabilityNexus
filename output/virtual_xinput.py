@@ -3,6 +3,8 @@ from output.base import OutputDevice
 
 class VirtualXInput(OutputDevice):
 
+    output_type = "xinput"
+
 
     #
     # XInput 目标名（与 profiles 中的映射目标一致）

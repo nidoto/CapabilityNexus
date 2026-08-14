@@ -297,13 +297,22 @@ mapping_engine.load_profile(
 
 
 #
-# 输出路由：虚拟 x360 + 真实设备输出
+# 输出路由：用户启用的虚拟输出设备 + 真实设备输出
 #
 
+from output.manager import OutputDeviceManager
 from output.router import OutputRouter
 
-output_router = OutputRouter(
+output_manager = OutputDeviceManager(
     event_bus=event_bus
+)
+
+output_manager.load()
+output_manager.build_all()
+
+output_router = OutputRouter(
+    event_bus=event_bus,
+    managed_instances=output_manager.get_instance,
 )
 
 

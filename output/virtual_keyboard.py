@@ -3,6 +3,8 @@ from output.base import OutputDevice
 
 class VirtualKeyboard(OutputDevice):
 
+    output_type = "keyboard"
+
     #
     # 虚拟键盘输出设备
     # 目标格式：key_<键名>（如 key_w, key_a, key_space, key_enter）

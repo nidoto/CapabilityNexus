@@ -97,7 +97,19 @@ class CapabilityNexusGUI:
         main.add(right, weight=2)
 
         self._build_device_tree(left)
-        self._build_mapping_panel(right)
+
+        notebook = ttk.Notebook(right)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        self.output_tab = ttk.Frame(notebook)
+        self.mapping_tab = ttk.Frame(notebook)
+
+        notebook.add(self.output_tab, text=self.t("tab_outputs"))
+        notebook.add(self.mapping_tab, text=self.t("tab_mappings"))
+
+        self._build_output_panel(self.output_tab)
+        self._build_mapping_panel(self.mapping_tab)
+
         self._build_log_panel(self.root)
 
     def _build_device_tree(self, parent):
@@ -182,6 +194,115 @@ class CapabilityNexusGUI:
 
         self.refresh_devices()
         self.log(f"Removed device: {device.get('name')}")
+
+    def _build_output_panel(self, parent):
+        box = ttk.LabelFrame(parent, text=self.t("tree_outputs"))
+        box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        self.output_list = tk.Listbox(box, height=10)
+        self.output_list.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+
+        btns = ttk.Frame(box)
+        btns.pack(fill=tk.X, padx=6, pady=4)
+        ttk.Button(btns, text=self.t("btn_add_output"), command=self.add_output_dialog).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btns, text=self.t("btn_remove_output"), command=self.remove_selected_output).pack(side=tk.LEFT, padx=2)
+
+        hint = ttk.Label(box, text=self.t("tree_output_hint"))
+        hint.pack(pady=4)
+
+        self.refresh_outputs()
+
+    def refresh_outputs(self):
+        if not hasattr(self, "output_list"):
+            return
+
+        self.output_list.delete(0, tk.END)
+        outputs = config_io.load_outputs()
+
+        for output in outputs.get("outputs", []):
+            name = output.get("name", output.get("id"))
+            out_type = output.get("type")
+            self.output_list.insert(tk.END, f"{name}  [{out_type}]")
+
+    def add_output_dialog(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self.t("btn_add_output"))
+        dialog.geometry("420x240")
+
+        ttk.Label(dialog, text="Output device type:").pack(padx=8, pady=(10, 2))
+
+        types = [
+            ("xinput", "XInput-compatible Controller"),
+            ("ds4", "DualShock-compatible Controller"),
+            ("keyboard", "Virtual Keyboard"),
+            ("mouse", "Virtual Mouse"),
+        ]
+
+        type_var = tk.StringVar(value="xinput")
+
+        for key, label in types:
+            ttk.Radiobutton(
+                dialog,
+                text=label,
+                variable=type_var,
+                value=key,
+            ).pack(anchor=tk.W, padx=16)
+
+        ttk.Label(dialog, text="Name:").pack(padx=8, pady=(10, 2))
+        name_var = tk.StringVar()
+        ttk.Entry(dialog, textvariable=name_var).pack(fill=tk.X, padx=8)
+
+        def save():
+            output_type = type_var.get()
+            name = name_var.get().strip() or {
+                "xinput": "XInput-compatible Controller",
+                "ds4": "DualShock-compatible Controller",
+                "keyboard": "Virtual Keyboard",
+                "mouse": "Virtual Mouse",
+            }.get(output_type, output_type)
+
+            outputs = config_io.load_outputs()
+            entries = outputs.get("outputs", [])
+
+            used_ids = {o.get("id") for o in entries}
+            base_id = f"virtual_{output_type}"
+            output_id = base_id
+            counter = 2
+            while output_id in used_ids:
+                output_id = f"{base_id}_{counter}"
+                counter += 1
+
+            entries.append({
+                "id": output_id,
+                "type": output_type,
+                "name": name,
+            })
+            config_io.save_outputs({"outputs": entries})
+
+            self.refresh_outputs()
+            self.log(f"Added output: {name}")
+            dialog.destroy()
+
+        ttk.Button(dialog, text=self.t("dlg_save"), command=save).pack(padx=8, pady=10)
+
+    def remove_selected_output(self):
+        selection = self.output_list.curselection()
+
+        if not selection:
+            self.log("Select an output device to remove.")
+            return
+
+        outputs = config_io.load_outputs()
+        entries = outputs.get("outputs", [])
+
+        if selection[0] >= len(entries):
+            return
+
+        removed = entries.pop(selection[0])
+        config_io.save_outputs({"outputs": entries})
+
+        self.refresh_outputs()
+        self.log(f"Removed output: {removed.get('name', removed.get('id'))}")
 
     def _build_mapping_panel(self, parent):
         box = ttk.LabelFrame(parent, text=self.t("panel_mappings"))

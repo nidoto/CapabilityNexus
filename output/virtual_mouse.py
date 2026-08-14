@@ -3,6 +3,8 @@ from output.base import OutputDevice
 
 class VirtualMouse(OutputDevice):
 
+    output_type = "mouse"
+
     #
     # 虚拟鼠标输出设备
     # 目标格式：

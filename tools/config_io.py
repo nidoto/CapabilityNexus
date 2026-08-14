@@ -3,6 +3,7 @@ import os
 
 
 CONFIG_PATH = os.path.join("config", "devices.json")
+OUTPUTS_PATH = os.path.join("config", "outputs.json")
 PACKAGES_PATH = os.path.join("packages")
 PROFILE_PATH = os.path.join("profiles", "default.json")
 
@@ -12,6 +13,19 @@ def load_config():
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
     return {"devices": []}
+
+
+def load_outputs():
+    if os.path.exists(OUTPUTS_PATH):
+        with open(OUTPUTS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"outputs": []}
+
+
+def save_outputs(data):
+    os.makedirs(os.path.dirname(OUTPUTS_PATH), exist_ok=True)
+    with open(OUTPUTS_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
 
 
 def save_config(data):

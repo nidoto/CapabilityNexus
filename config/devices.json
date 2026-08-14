@@ -1,27 +1,6 @@
 {
     "devices": [
         {
-            "name": "My ESP32 Custom Board",
-            "driver": "serial",
-            "connection": {
-                "type": "serial",
-                "port": "COM3",
-                "baudrate": 115200
-            },
-            "vid": "1A86",
-            "pid": "55D3",
-            "package": "motion_demo",
-            "protocol": {
-                "has_frame": true,
-                "frame_prefix": "FRAME=",
-                "mapping": {
-                    "X": "motion.yaw",
-                    "Y": "motion.pitch",
-                    "R": "motion.roll"
-                }
-            }
-        },
-        {
             "name": "New Device",
             "driver": "xinput",
             "package": "xbox_one",
