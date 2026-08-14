@@ -189,8 +189,11 @@ class CapabilityNexusGUI:
         box = ttk.LabelFrame(parent, text=self.t("tree_outputs"))
         box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
-        self.output_list = tk.Listbox(box, height=10)
-        self.output_list.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self.output_tree = ttk.Treeview(box, columns=("func",), show="tree headings")
+        self.output_tree.heading("#0", text=self.t("tree_output_device"))
+        self.output_tree.heading("func", text=self.t("tree_type"))
+        self.output_tree.column("func", width=120)
+        self.output_tree.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
         btns = ttk.Frame(box)
         btns.pack(fill=tk.X, padx=6, pady=4)
@@ -202,17 +205,48 @@ class CapabilityNexusGUI:
 
         self.refresh_outputs()
 
+    def _output_type_info(self):
+        from output.devices import OUTPUT_DEVICES
+
+        type_map = {
+            "xinput": next((d for d in OUTPUT_DEVICES if d.id == "virtual_x360"), None),
+            "ds4": next((d for d in OUTPUT_DEVICES if d.id == "virtual_ds4"), None),
+            "keyboard": next((d for d in OUTPUT_DEVICES if d.id == "virtual_keyboard"), None),
+            "mouse": next((d for d in OUTPUT_DEVICES if d.id == "virtual_mouse"), None),
+        }
+        return type_map
+
     def refresh_outputs(self):
-        if not hasattr(self, "output_list"):
+        if not hasattr(self, "output_tree"):
             return
 
-        self.output_list.delete(0, tk.END)
+        self.output_tree.delete(*self.output_tree.get_children())
+
         outputs = config_io.load_outputs()
+        type_map = self._output_type_info()
 
         for output in outputs.get("outputs", []):
             name = output.get("name", output.get("id"))
             out_type = output.get("type")
-            self.output_list.insert(tk.END, f"{name}  [{out_type}]")
+
+            device_node = self.output_tree.insert(
+                "",
+                tk.END,
+                text=f"{name}  [{out_type}]",
+                values=("output_device",),
+                open=True,
+            )
+
+            info = type_map.get(out_type)
+
+            if info:
+                for target, desc in info.targets.items():
+                    self.output_tree.insert(
+                        device_node,
+                        tk.END,
+                        text=f"{target}  ({desc})",
+                        values=("output_function",),
+                    )
 
     def add_output_dialog(self):
         dialog = tk.Toplevel(self.root)
@@ -276,23 +310,45 @@ class CapabilityNexusGUI:
         ttk.Button(dialog, text=self.t("dlg_save"), command=save).pack(padx=8, pady=10)
 
     def remove_selected_output(self):
-        selection = self.output_list.curselection()
+        selection = self.output_tree.selection()
 
         if not selection:
             self.log("Select an output device to remove.")
             return
 
+        item = selection[0]
+        node = self.output_tree.item(item)
+        values = node.get("values", []) or []
+
+        # 选中功能节点时向上找设备节点
+        while values and values[0] != "output_device":
+            item = self.output_tree.parent(item)
+            node = self.output_tree.item(item)
+            values = node.get("values", []) or []
+
+        device_text = node.get("text")
+
+        if not device_text:
+            self.log("Select an output device node to remove.")
+            return
+
         outputs = config_io.load_outputs()
         entries = outputs.get("outputs", [])
 
-        if selection[0] >= len(entries):
+        device = next(
+            (o for o in entries if device_text.startswith(o.get("name", ""))),
+            None,
+        )
+
+        if device is None:
+            self.log("Output device not found.")
             return
 
-        removed = entries.pop(selection[0])
+        entries.remove(device)
         config_io.save_outputs({"outputs": entries})
 
         self.refresh_outputs()
-        self.log(f"Removed output: {removed.get('name', removed.get('id'))}")
+        self.log(f"Removed output: {device.get('name', device.get('id'))}")
 
     def _build_log_panel(self, parent):
         logbox = ttk.LabelFrame(parent, text=self.t("panel_log"))
