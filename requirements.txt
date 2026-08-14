@@ -1,0 +1,29 @@
+# CapabilityNexus runtime dependencies (Windows)
+#
+# Install with:
+#   py -3 -m pip install -r requirements.txt
+#
+# Optional hardware backends:
+#   - vgamepad + ViGEmBus service: XInput-compatible output
+#   - pynput: virtual keyboard / mouse output
+#   - pygame: generic USB HID input
+#   - bleak: Bluetooth LE (FTMS cycling trainer)
+#   - openant: ANT+ cycling devices (requires USB ANT+ adapter)
+
+# Core / XInput-compatible output
+vgamepad==0.1.0
+
+# Serial input (ESP32, Arduino, etc.)
+pyserial==3.5
+
+# HID input (USB gamepads, wheels, joysticks)
+pygame==2.6.1
+
+# Bluetooth LE (FTMS trainers)
+bleak==3.0.2
+
+# ANT+ cycling devices
+openant==1.3.4
+
+# Virtual keyboard / mouse output
+pynput==1.8.2

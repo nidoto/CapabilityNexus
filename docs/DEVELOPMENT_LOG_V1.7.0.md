@@ -55,6 +55,14 @@ boundaries and product documentation.
 - First in-game test with Cyberpunk 2077: HidHide hides the real Xbox One pad,
   the virtual XInput-compatible controller is the only pad the game sees, and
   the gyro steers the in-game camera (tuning still in progress)
+- Release packaging prep
+  - `requirements.txt` with pinned runtime dependencies (vgamepad, pyserial,
+    pygame, bleak, openant, pynput)
+  - `LICENSE` (MIT) for the project itself
+  - Expanded `THIRD_PARTY_NOTICES.md` with licenses for all Python packages
+  - `tools/build_release.py`: produces a source distribution under `dist/`
+    (client code, default config, docs, launcher); excludes local device
+    tuning (`profiles/local`), caches and `__pycache__`
 
 ## ESP32 Boundary
 
@@ -72,9 +80,11 @@ axis values. The open client forwards final control values.
 
 ## Remaining Work
 
-- Add official third-party installer assets and license bundles
+- Add official third-party installer assets and license bundles (download
+  ViGEmBus / HidHide official installers and vendor their license files)
 - Add automated hardware-in-the-loop tests
 - Test multiple games and controller selection behavior
+- Consider a frozen executable (e.g. PyInstaller) for non-Python users
 
 ## Product Documentation Update
 

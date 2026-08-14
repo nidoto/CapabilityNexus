@@ -20,6 +20,17 @@ start.cmd
 The launcher changes to the project directory before starting the GUI, so
 configuration paths remain stable when started by double-clicking.
 
+## Installing Dependencies
+
+Install the Python packages:
+
+```text
+py -3 -m pip install -r requirements.txt
+```
+
+`requirements.txt` pins the runtime dependencies used by the client. Missing
+packages are reported at startup in the log and in the GUI warning dialog.
+
 ## Dependency Behavior
 
 At startup the client checks:
