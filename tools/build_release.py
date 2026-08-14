@@ -116,6 +116,11 @@ def build_source(out_dir):
         if os.path.exists(src):
             shutil.copy2(src, os.path.join(out_dir, filename))
 
+    # 驱动安装辅助脚本放到发布根目录
+    install_script = os.path.join(PROJECT_ROOT, "tools", "install_drivers.cmd")
+    if os.path.exists(install_script):
+        shutil.copy2(install_script, os.path.join(out_dir, "install_drivers.cmd"))
+
     default_config = {"devices": []}
     default_outputs = {
         "outputs": [

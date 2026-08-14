@@ -77,6 +77,13 @@ boundaries and product documentation.
     vendor bundle such as QKeyMapper) is copied so the released driver is
     complete and self-contained; official 1.22.0 is used as fallback
   - Drivers are never installed silently; official builds require user consent
+- Driver install helper
+  - `tools/install_drivers.cmd` is copied to the release root; it auto-elevates
+    (UAC) and installs the bundled ViGEmBus (via nefconw.exe --install-driver)
+    and HidHide setup, then reminds the user to reboot
+- End-to-end verified: the frozen exe starts and stays running; the release
+  source distribution boots the engine, creates the virtual XInput-compatible
+  controller on XInput slot 0 and shuts down cleanly
 
 ## ESP32 Boundary
 
