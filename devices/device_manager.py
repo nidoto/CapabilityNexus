@@ -126,6 +126,13 @@ class DeviceManager:
                         "e.g. custom development boards (ESP32/Raspberry Pi)",
                     )
 
+        # 始终监听型设备（phone WebSocket 服务器）：来自 config，始终连接
+        for entry in self._config:
+            if entry.get("driver") == "phone":
+                detected = {"type": "phone"}
+                resolved.append((detected, entry, "config"))
+                print("[DeviceManager] Phone device from config:", entry.get("name"))
+
         return resolved
 
     def detected_xinput_indices(self):
@@ -338,6 +345,29 @@ class DeviceManager:
 
             connection = ConnectionFactory.create(
                 callback,
+                connection_params,
+            )
+            connection.open()
+            return connection
+
+        if driver == "phone":
+            from devices.connection_factory import ConnectionFactory
+            from devices.websocket_connection import PhoneFrameParser
+
+            connection_params = entry.get("connection", {})
+            if "type" not in connection_params:
+                connection_params = {
+                    "type": "websocket",
+                    "port": entry.get("port", 8765),
+                }
+
+            parser = PhoneFrameParser(self.event_bus)
+
+            def phone_callback(message):
+                parser.parse(message)
+
+            connection = ConnectionFactory.create(
+                phone_callback,
                 connection_params,
             )
             connection.open()

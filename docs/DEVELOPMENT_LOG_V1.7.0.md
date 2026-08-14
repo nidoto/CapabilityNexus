@@ -145,6 +145,18 @@ boundaries and product documentation.
   - Upload/contribution is intentionally not a client feature: submitting
     game configs is done manually via GitHub to keep the client safe and
     zero-privilege
+- Phone-as-device (Web sensor) support
+  - `devices/websocket_connection.py`: WebSocket server (websockets 17.x) that
+    listens for a phone browser and parses sensor frames (roll/pitch/yaw,
+    accelerometer, gas/brake pedals, buttons, dpad) into `phone.*` capabilities
+  - The same port serves the phone control page (`web/phone.html`) over HTTP,
+    so a phone opens `http://<PC-IP>:<port>/` in its browser and connects to
+    `ws://<PC-IP>:<port>/ws` - zero install, works on any OS/phone browser
+  - Phone device (`driver=phone`) is auto-connected from config; 16 phone
+    capabilities registered
+  - Verified end-to-end: phone WS -> phone.roll/gas/button_a -> mapping ->
+    virtual XInput output (steering/trigger/button all routed)
+  - Roadmap: Bluetooth transport, then a native Android app
 
 ## ESP32 Boundary
 

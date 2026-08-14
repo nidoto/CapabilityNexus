@@ -37,6 +37,7 @@ INCLUDE_DIRS = (
     "config",
     "docs",
     "profiles",
+    "web",
 )
 
 INCLUDE_FILES = (

@@ -230,6 +230,7 @@ serial  - SerialConnection（USB 串口）
 tcp     - TcpConnection（有线/WiFi）
 udp     - UdpConnection（低延迟网络）
 bluetooth - BluetoothConnection（RFCOMM）
+websocket - WebSocketServerConnection（手机浏览器传感器，服务端监听）
 custom  - 用户自定义（config/custom_connections.py）
 
 工厂：

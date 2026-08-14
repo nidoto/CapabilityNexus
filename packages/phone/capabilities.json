@@ -1,0 +1,204 @@
+{
+    "capabilities": [
+        {
+            "id": "phone.roll",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
+                -180,
+                180
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.pitch",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
+                -180,
+                180
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.yaw",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
+                -180,
+                180
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.accel_x",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
+                -20,
+                20
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.accel_y",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
+                -20,
+                20
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.accel_z",
+            "category": "axis",
+            "value_type": "float",
+            "range": [
+                -20,
+                20
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.gas",
+            "category": "trigger",
+            "value_type": "float",
+            "range": [
+                0,
+                1
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.brake",
+            "category": "trigger",
+            "value_type": "float",
+            "range": [
+                0,
+                1
+            ],
+            "continuous": true,
+            "return_center": true,
+            "transport": {
+                "mode": "stream",
+                "speed": "fast"
+            }
+        },
+        {
+            "id": "phone.button_a",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.button_b",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.button_x",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.button_y",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.dpad_up",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.dpad_down",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.dpad_left",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.dpad_right",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        }
+    ]
+}

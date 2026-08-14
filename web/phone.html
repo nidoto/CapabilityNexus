@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CapabilityNexus Phone</title>
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  .top {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #1e293b;
+  }
+  .top input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #e2e8f0;
+  }
+  .top button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    background: #2563eb;
+    color: #fff;
+    font-weight: bold;
+  }
+  .status {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+  .ok { color: #4ade80; }
+  .err { color: #f87171; }
+
+  .mode-row {
+    padding: 6px 14px;
+    display: flex;
+    gap: 8px;
+  }
+  .mode-row button {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: #1e293b;
+    color: #cbd5e1;
+  }
+  .mode-row button.active {
+    background: #2563eb;
+    color: #fff;
+  }
+
+  .sensor-box {
+    margin: 12px 14px;
+    padding: 12px;
+    background: #1e293b;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+  .sensor-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-family: monospace;
+  }
+
+  /* 方向盘模式 */
+  .wheel {
+    margin: 20px auto;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background: #1e293b;
+    border: 4px solid #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: transform 0.05s linear;
+  }
+  .wheel .hub {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #2563eb;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+  }
+  .wheel .spoke {
+    position: absolute;
+    width: 4px;
+    height: 100%;
+    background: #334155;
+  }
+
+  /* 触屏按钮 */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .btn {
+    padding: 22px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 18px;
+    font-weight: bold;
+    background: #334155;
+    color: #e2e8f0;
+  }
+  .btn.pressed { background: #2563eb; color: #fff; }
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    padding: 12px 14px;
+    max-width: 300px;
+    margin: 0 auto;
+  }
+  .dpad .btn { padding: 16px 0; font-size: 14px; }
+
+  .pedals {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .pedal {
+    flex: 1;
+    height: 90px;
+    border-radius: 10px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid #334155;
+  }
+  .pedal .fill {
+    width: 100%;
+    background: #2563eb;
+    transition: height 0.05s linear;
+  }
+  .pedal.gas .fill { background: #22c55e; }
+  .pedal.brake .fill { background: #ef4444; }
+  .pedal .label {
+    position: absolute;
+    top: 8px;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <input id="addr" type="text" value="ws://192.168.1.100:8765/ws" placeholder="ws://PC-IP:8765/ws">
+  <button id="connectBtn">连接</button>
+</div>
+
+<div class="status" id="status">未连接</div>
+
+<div class="mode-row">
+  <button id="modeWheel" class="active">方向盘</button>
+  <button id="modePad">手柄</button>
+</div>
+
+<!-- 方向盘模式 -->
+<div id="wheelMode">
+  <div class="wheel" id="wheel">
+    <div class="spoke"></div>
+    <div class="hub">STEER</div>
+  </div>
+  <div class="sensor-box">
+    <div class="sensor-row"><span>Roll (方向)</span><span id="v_roll">0.0</span></div>
+    <div class="sensor-row"><span>Pitch (油门/刹车)</span><span id="v_pitch">0.0</span></div>
+  </div>
+  <div class="pedals">
+    <div class="pedal gas">
+      <div class="fill" id="gasFill" style="height:0%"></div>
+      <div class="label">油门</div>
+    </div>
+    <div class="pedal brake">
+      <div class="fill" id="brakeFill" style="height:0%"></div>
+      <div class="label">刹车</div>
+    </div>
+  </div>
+</div>
+
+<!-- 手柄模式 -->
+<div id="padMode" style="display:none">
+  <div class="dpad">
+    <div></div>
+    <button class="btn" id="dpad_up" data-btn="up">▲</button>
+    <div></div>
+    <button class="btn" id="dpad_left" data-btn="left">◀</button>
+    <div></div>
+    <button class="btn" id="dpad_right" data-btn="right">▶</button>
+    <div></div>
+    <button class="btn" id="dpad_down" data-btn="down">▼</button>
+    <div></div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="btn_x" data-btn="x">X</button>
+    <button class="btn" id="btn_y" data-btn="y">Y</button>
+    <button class="btn" id="btn_a" data-btn="a">A</button>
+    <button class="btn" id="btn_b" data-btn="b">B</button>
+  </div>
+</div>
+
+<script>
+let ws = null;
+let connected = false;
+let mode = "wheel";
+
+const addrInput = document.getElementById("addr");
+const statusEl = document.getElementById("status");
+
+function setStatus(text, ok) {
+  statusEl.textContent = text;
+  statusEl.className = "status " + (ok ? "ok" : "err");
+}
+
+function connect() {
+  const url = addrInput.value.trim();
+  if (!url) return;
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    setStatus("连接失败: " + e.message, false);
+    return;
+  }
+  ws.onopen = () => {
+    connected = true;
+    setStatus("已连接: " + url, true);
+    sendAll();
+  };
+  ws.onclose = () => {
+    connected = false;
+    setStatus("已断开", false);
+  };
+  ws.onerror = (e) => {
+    setStatus("错误: " + (e.message || "连接错误"), false);
+  };
+}
+
+document.getElementById("connectBtn").onclick = connect;
+
+// 模式切换
+document.getElementById("modeWheel").onclick = () => setMode("wheel");
+document.getElementById("modePad").onclick = () => setMode("pad");
+
+function setMode(m) {
+  mode = m;
+  document.getElementById("modeWheel").className = "mode-btn" + (m === "wheel" ? " active" : "");
+  document.getElementById("modePad").className = "mode-btn" + (m === "pad" ? " active" : "");
+  document.getElementById("wheelMode").style.display = m === "wheel" ? "block" : "none";
+  document.getElementById("padMode").style.display = m === "pad" ? "block" : "none";
+  document.getElementById("modeWheel").classList.toggle("active", m === "wheel");
+  document.getElementById("modePad").classList.toggle("active", m === "pad");
+}
+
+// 传感器状态
+let roll = 0, pitch = 0, yaw = 0;
+let accelX = 0, accelY = 0, accelZ = 0;
+let gas = 0, brake = 0;
+const buttons = { a: false, b: false, x: false, y: false };
+const dpad = { up: false, down: false, left: false, right: false };
+
+// 设备方向（陀螺仪）
+function handleOrientation(e) {
+  roll = e.beta || 0;   // 前后倾斜（方向盘角度用 gamma 更合适，这里映射）
+  pitch = e.gamma || 0;
+  yaw = e.alpha || 0;
+  updateWheel();
+}
+
+// 设备运动（加速度）
+function handleMotion(e) {
+  const a = e.accelerationIncludingGravity || {};
+  accelX = a.x || 0;
+  accelY = a.y || 0;
+  accelZ = a.z || 0;
+}
+
+window.addEventListener("deviceorientation", handleOrientation, true);
+window.addEventListener("devicemotion", handleMotion, true);
+
+function updateWheel() {
+  // 方向盘：左右倾斜 = gamma（roll）→ 旋转角度
+  // 手机竖屏拿，左右倾斜时 gamma 变化
+  const steerDeg = clamp(roll, -45, 45);
+  const wheel = document.getElementById("wheel");
+  wheel.style.transform = "rotate(" + (-steerDeg) + "deg)";
+  document.getElementById("v_roll").textContent = roll.toFixed(1);
+  document.getElementById("v_pitch").textContent = pitch.toFixed(1);
+
+  // 油门/刹车：前后倾斜 pitch
+  gas = clamp((pitch - 5) / 40, 0, 1);
+  brake = clamp((-pitch - 5) / 40, 0, 1);
+  document.getElementById("gasFill").style.height = (gas * 100) + "%";
+  document.getElementById("brakeFill").style.height = (brake * 100) + "%";
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// 触屏按钮
+function bindButton(id, key) {
+  const el = document.getElementById(id);
+  const press = (p) => {
+    if (key.startsWith("dpad_")) {
+      dpad[key.replace("dpad_", "")] = p;
+    } else {
+      buttons[key] = p;
+    }
+    el.classList.toggle("pressed", p);
+    sendAll();
+  };
+  el.addEventListener("pointerdown", (e) => { e.preventDefault(); press(true); });
+  el.addEventListener("pointerup", (e) => { e.preventDefault(); press(false); });
+  el.addEventListener("pointercancel", (e) => { press(false); });
+  el.addEventListener("pointerleave", (e) => { press(false); });
+}
+
+bindButton("btn_a", "a");
+bindButton("btn_b", "b");
+bindButton("btn_x", "x");
+bindButton("btn_y", "y");
+bindButton("dpad_up", "dpad_up");
+bindButton("dpad_down", "dpad_down");
+bindButton("dpad_left", "dpad_left");
+bindButton("dpad_right", "dpad_right");
+
+// 发送
+let lastSend = 0;
+function sendAll() {
+  if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const now = performance.now();
+  if (now - lastSend < 20) return; // ~50Hz 节流
+  lastSend = now;
+
+  const payload = {
+    t: "sensors",
+    roll: round(roll),
+    pitch: round(pitch),
+    yaw: round(yaw),
+    accelX: round(accelX),
+    accelY: round(accelY),
+    accelZ: round(accelZ),
+    gas: round(gas),
+    brake: round(brake),
+    buttons: buttons,
+    dpad: dpad,
+  };
+  ws.send(JSON.stringify(payload));
+}
+
+function round(v) { return Math.round(v * 1000) / 1000; }
+
+// 自动重连 + 定期发送
+setInterval(sendAll, 20);
+</script>
+</body>
+</html>

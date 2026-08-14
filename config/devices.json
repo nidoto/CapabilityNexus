@@ -32,6 +32,15 @@
             "package": "xbox_one",
             "auto_connected": true,
             "index": 1
+        },
+        {
+            "name": "Phone",
+            "driver": "phone",
+            "package": "phone",
+            "connection": {
+                "type": "websocket",
+                "port": 8765
+            }
         }
     ]
 }

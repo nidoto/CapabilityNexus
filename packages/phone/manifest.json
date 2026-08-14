@@ -1,0 +1,7 @@
+{
+    "name": "Phone (Web Sensor)",
+    "author": "CapabilityNexus",
+    "version": "1.0",
+    "description": "Phone browser as a sensor device: gyroscope (roll/pitch/yaw), accelerometer and touch buttons over WebSocket.",
+    "type": "input"
+}

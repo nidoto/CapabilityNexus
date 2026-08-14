@@ -39,6 +39,15 @@ class ConnectionFactory:
                 channel=params.get("channel", 1),
             )
 
+        if connection_type == "websocket":
+            from devices.websocket_connection import WebSocketServerConnection
+
+            return WebSocketServerConnection(
+                callback,
+                host=params.get("host", "0.0.0.0"),
+                port=params.get("port", 8765),
+            )
+
         if connection_type == "custom":
             from devices.custom_connection import load_custom_connection
 
