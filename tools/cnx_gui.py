@@ -1101,7 +1101,7 @@ class CapabilityNexusGUI:
 
         # Web 服务（手机）—— 实例跨重建复用，保持运行状态
         if not hasattr(self, "_web_service") or self._web_service is None:
-            self._web_service = services.WebService(port=8765, callback=self._phone_data_callback)
+            self._web_service = services.WebService(port=8765, callback=self._phone_data_callback, use_https=True)
         web_frame, web_status, web_toggle = make_service_row(rows, self.t("svc_web"), 0)
         self._web_status_label = web_status
         self._web_toggle_btn = web_toggle

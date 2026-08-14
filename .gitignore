@@ -18,3 +18,6 @@ config/request_library_cache.json
 # 本地游戏调优配置（不随仓库上传，随设备/个人使用）
 profiles/local/
 config/active_profile.json
+
+# 本地自签 HTTPS 证书（运行时生成，不随仓库上传）
+config/certs/

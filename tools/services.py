@@ -69,20 +69,45 @@ def best_local_ip():
 
 
 class WebService:
-    """Web 手机服务：独立于引擎的 WebSocket 服务器。"""
+    """Web 手机服务：独立于引擎的 WebSocket 服务器。
 
-    def __init__(self, port=8765, callback=None):
+    use_https=True 时启用 HTTPS（自签证书）：手机访问 https://IP:port 需要
+    在浏览器点"继续访问"，但可获得完整能力（陀螺仪等 secure context API）。
+    use_https=False 时仅 HTTP：手机直接访问，但陀螺仪不可用（触屏模式）。
+    """
+
+    def __init__(self, port=8765, callback=None, use_https=True):
         self.port = port
         self.callback = callback
+        self.use_https = use_https
         self._server = None
         self._lock = threading.Lock()
         self._parser = None  # PhoneFrameParser，用于记录连接的手机设备
+        self._ssl = None
+
+    @property
+    def scheme(self):
+        return "https" if self.use_https and self._ssl else "http"
+
+    @property
+    def ws_scheme(self):
+        return "wss" if self.scheme == "https" else "ws"
 
     def _make_server(self):
         from devices.websocket_connection import WebSocketServerConnection
         from devices.websocket_connection import PhoneFrameParser
 
         self._parser = PhoneFrameParser(event_bus=None)
+
+        # HTTPS：生成自签证书
+        self._ssl = None
+        if self.use_https:
+            try:
+                from tools.certs import ssl_context
+                self._ssl = ssl_context()
+            except Exception as error:
+                print(f"[WebService] HTTPS setup failed, falling back to HTTP: {error}")
+                self._ssl = None
 
         def wrapped_callback(message):
             # 解析 hello 记录设备名；sensors/buttons 帧只更新设备存在，
@@ -104,6 +129,7 @@ class WebService:
             wrapped_callback,
             host="0.0.0.0",
             port=self.port,
+            ssl_context=self._ssl,
         )
 
     @property
@@ -158,13 +184,16 @@ class WebService:
         """返回服务信息 dict。"""
         running = self.is_running()
         ips = get_local_ips()
+        scheme = self.scheme
+        ws_scheme = self.ws_scheme
         return {
             "running": running,
             "port": self.port,
             "ips": ips,
             "best_ip": best_local_ip(),
-            "page_urls": [f"http://{ip}:{self.port}/" for ip in ips],
-            "ws_urls": [f"ws://{ip}:{self.port}/ws" for ip in ips],
+            "scheme": scheme,
+            "page_urls": [f"{scheme}://{ip}:{self.port}/" for ip in ips],
+            "ws_urls": [f"{ws_scheme}://{ip}:{self.port}/ws" for ip in ips],
         }
 
     def close(self):

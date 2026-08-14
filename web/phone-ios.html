@@ -239,7 +239,7 @@ let autoReconnect = true;
 
 function connect() {
   // 始终使用当前页面主机（自动匹配 PC IP + 端口）
-  let url = "ws://" + window.location.host + "/ws";
+  let url = (location.protocol === "https:" ? "wss://" : "ws://") + window.location.host + "/ws";
   addrInput.value = url;
   if (!url) return;
   try {
@@ -276,7 +276,7 @@ function scheduleReconnect() {
 
 // 页面加载后自动连接（iOS 需用户授权传感器后才启动 WS）
 (function() {
-  addrInput.value = "ws://" + window.location.host + "/ws";
+  addrInput.value = (location.protocol === "https:" ? "wss://" : "ws://") + window.location.host + "/ws";
   setStatus("自动连接中...", false);
   connect();
 })();

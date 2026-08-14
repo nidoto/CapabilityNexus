@@ -47,10 +47,11 @@ WEB_DIR = _web_dir()
 
 class WebSocketServerConnection(LineConnection):
 
-    def __init__(self, callback, host="0.0.0.0", port=8765):
+    def __init__(self, callback, host="0.0.0.0", port=8765, ssl_context=None):
         super().__init__(callback)
         self.host = host
         self.port = port
+        self.ssl_context = ssl_context
         self.server = None
         self.thread = None
         self._ready = None
@@ -65,8 +66,10 @@ class WebSocketServerConnection(LineConnection):
         self._ready.wait(timeout=5)
         if not self._ready.is_set():
             print(f"[WebSocketServer] Warning: server may not be ready on {self.host}:{self.port}")
-        print(f"[WebSocketServer] Listening on ws://{self.host}:{self.port}")
-        print(f"[WebSocketServer] Phone page: http://<PC-IP>:{self.port}/")
+        scheme = "wss" if self.ssl_context else "ws"
+        http_scheme = "https" if self.ssl_context else "http"
+        print(f"[WebSocketServer] Listening on {scheme}://{self.host}:{self.port}")
+        print(f"[WebSocketServer] Phone page: {http_scheme}://<PC-IP>:{self.port}/")
 
     def _run_server(self):
         asyncio.run(self._serve())
@@ -132,6 +135,7 @@ class WebSocketServerConnection(LineConnection):
             self.port,
             max_size=64 * 1024,
             process_request=self._process_request,
+            ssl=self.ssl_context,
         )
         self._ready.set()
         try:
