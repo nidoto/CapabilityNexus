@@ -83,7 +83,9 @@
     padding: 6px;
     display: none;
     flex-direction: column;
-    min-width: 140px;
+    min-width: 150px;
+    max-height: 70vh;
+    overflow-y: auto;
     box-shadow: 0 8px 24px rgba(0,0,0,0.6);
   }
   #ballMenu.on { display: flex; }
@@ -432,11 +434,25 @@ window.addEventListener("pointercancel", function() {
 
 // 悬浮球菜单
 function openBallMenu() {
-  var mw = 150, mh = 9 * 38;
-  var mx = Math.min(ballX, window.innerWidth - mw);
-  var my = Math.min(ballY, window.innerHeight - mh);
+  // 先显示再测量真实尺寸，避免横屏高度不足
+  ballMenu.style.display = "flex";
+  var mw = ballMenu.offsetWidth;
+  var mh = ballMenu.offsetHeight;
+  var vw = window.innerWidth, vh = window.innerHeight;
+
+  // 菜单优先出现在悬浮球上方；空间不足则放下方
+  var mx = ballX + 56;   // 悬浮球右侧
+  var my = ballY - mh;   // 悬浮球上方
+  if (my < 4) my = ballY + 56;  // 上方不够 → 下方
+  // 确保不超出右/下边界
+  mx = Math.min(mx, vw - mw - 4);
+  my = Math.min(my, vh - mh - 4);
+  if (mx < 4) mx = 4;
+  if (my < 4) my = 4;
+
   ballMenu.style.left = mx + "px";
   ballMenu.style.top = my + "px";
+  ballMenu.style.display = "none";
   ballMenu.classList.add("on");
 }
 
