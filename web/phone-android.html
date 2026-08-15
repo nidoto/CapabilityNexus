@@ -37,10 +37,6 @@
     color: #fff;
     font-weight: bold;
   }
-  .top button#fullscreenBtn, .top button#lockBtn {
-    padding: 8px 10px;
-    font-size: 14px;
-  }
   #lockOverlay {
     display: none;
     position: fixed;
@@ -53,12 +49,14 @@
   /* 悬浮球：始终最顶层，可拖动，功能菜单入口 */
   #dragBall {
     position: fixed;
-    width: 56px;
-    height: 56px;
+    left: 8px;
+    top: 10px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background: #22c55e;
     color: #fff;
-    font-size: 24px;
+    font-size: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -67,11 +65,10 @@
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
-    cursor: grab;
-    opacity: 0.9;
+    cursor: pointer;
+    opacity: 0.92;
   }
-  #dragBall.dragging { cursor: grabbing; transform: scale(1.15); opacity: 1; }
-  #dragBall.hidden { display: none; }
+  #dragBall:active { transform: scale(1.1); }
 
   /* 悬浮球菜单 */
   #ballMenu {
@@ -236,9 +233,6 @@
 
 <div class="top">
   <input id="addr" type="text" value="" placeholder="自动使用当前地址（也可手动填 ws://PC-IP:8765/ws）">
-  <button id="connectBtn">连接</button>
-  <button id="fullscreenBtn">⛶</button>
-  <button id="lockBtn">🔒</button>
 </div>
 
 <div class="status" id="status">未连接</div>
@@ -246,7 +240,7 @@
 <!-- 锁定遮罩（悬浮球下层，覆盖全屏拦截触摸） -->
 <div id="lockOverlay"></div>
 
-<!-- 悬浮球（最顶层，可拖动；点击弹出功能菜单） -->
+<!-- 悬浮球：固定于左上角，点击弹出功能菜单 -->
 <div id="dragBall">🔒</div>
 <div id="ballMenu">
   <div class="menu-label">悬浮球菜单</div>
@@ -332,105 +326,33 @@ function toggleFullscreen() {
     (document.exitFullscreen || document.webkitExitFullscreen || function() {}).call(document);
   }
 }
-document.getElementById("fullscreenBtn").addEventListener("click", toggleFullscreen);
-
-// ---- 悬浮球（最顶层，可拖动；点击弹出功能菜单） ----
+// ---- 悬浮球（固定左上角；点击弹出功能菜单） ----
 var lockOverlay = document.getElementById("lockOverlay");
 var dragBall = document.getElementById("dragBall");
 var ballMenu = document.getElementById("ballMenu");
 var locked = false;
-var ballX = 20, ballY = 120; // 悬浮球初始位置
-var ballDrag = false, ballMoved = false;
-var ballStartX = 0, ballStartY = 0, ballOrigX = 0, ballOrigY = 0;
-
-function ballVisible() {
-  // 悬浮球常驻可用
-  return true;
-}
-
-function updateBall() {
-  var vw = window.innerWidth, vh = window.innerHeight;
-  // 限制在屏幕内（贴边 = 最小化收纳）
-  ballX = Math.max(0, Math.min(vw - 56, ballX));
-  ballY = Math.max(0, Math.min(vh - 56, ballY));
-  dragBall.style.left = ballX + "px";
-  dragBall.style.top = ballY + "px";
-
-  // 靠近边缘时显示箭头提示（点击会向屏幕内侧弹出菜单）
-  if (ballY < 30) {
-    dragBall.textContent = "▲";   // 顶部边缘 → 向下弹菜单
-  } else if (ballY > vh - 86) {
-    dragBall.textContent = "▼";   // 底部边缘 → 向上弹菜单
-  } else if (ballX < 30) {
-    dragBall.textContent = "◀";   // 左侧边缘 → 向右弹菜单
-  } else if (ballX > vw - 86) {
-    dragBall.textContent = "▶";   // 右侧边缘 → 向左弹菜单
-  } else if (!locked) {
-    dragBall.textContent = "🔒";  // 中间 → 锁图标（未锁定）
-  } else {
-    dragBall.textContent = "🔓";  // 中间 → 解锁图标（已锁定）
-  }
-}
-
-// 初始化悬浮球位置
-(function() {
-  ballX = 20;
-  ballY = window.innerHeight - 160;
-  updateBall();
-})();
 
 function setLocked(state) {
   locked = state;
   lockOverlay.classList.toggle("on", state);
   ballMenu.classList.remove("on");
-  // 锁定/解锁后小球保持在原位置（或锁定后移到中间偏下方便解锁）
-  if (state) {
-    ballX = window.innerWidth / 2 - 28;
-    ballY = window.innerHeight - 160;
-  }
-  updateBall();
+  dragBall.textContent = state ? "🔓" : "🔒";
 }
 
-// 悬浮球拖动
-dragBall.addEventListener("pointerdown", function(e) {
-  e.preventDefault();
-  ballDrag = true;
-  ballMoved = false;
-  ballStartX = e.clientX;
-  ballStartY = e.clientY;
-  ballOrigX = ballX;
-  ballOrigY = ballY;
-  dragBall.classList.add("dragging");
+// 点击悬浮球：弹出菜单
+dragBall.addEventListener("click", function(e) {
+  e.stopPropagation();
+  openBallMenu();
 });
-window.addEventListener("pointermove", function(e) {
-  if (!ballDrag) return;
-  var dx = e.clientX - ballStartX;
-  var dy = e.clientY - ballStartY;
-  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) ballMoved = true;
-  ballX = ballOrigX + dx;
-  ballY = ballOrigY + dy;
-  updateBall();
-});
-window.addEventListener("pointerup", function(e) {
-  if (!ballDrag) return;
-  ballDrag = false;
-  dragBall.classList.remove("dragging");
 
-  if (ballMoved) {
-    // 拖动结束：贴边（边缘 20px 内）→ 收纳；否则保留当前位置
-    var vw = window.innerWidth;
-    if (ballX < 20) ballX = 0;
-    else if (ballX > vw - 76) ballX = vw - 56;
-    updateBall();
-  } else {
-    // 单击：弹出菜单
-    openBallMenu();
+// 点遮罩空白处关闭菜单
+lockOverlay.addEventListener("pointerdown", function(e) {
+  if (ballMenu.classList.contains("on")) {
+    ballMenu.classList.remove("on");
   }
+  e.preventDefault();
 });
-window.addEventListener("pointercancel", function() {
-  ballDrag = false;
-  dragBall.classList.remove("dragging");
-});
+
 
 // 悬浮球菜单
 function openBallMenu() {
@@ -496,10 +418,7 @@ lockOverlay.addEventListener("pointerdown", function(e) {
   e.preventDefault();
 });
 
-// 顶部锁定按钮：锁定 / 解锁
-document.getElementById("lockBtn").addEventListener("click", function() {
-  setLocked(!locked);
-});
+// 悬浮球菜单（在 openBallMenu 中弹出，含锁定/解锁入口）
 
 let autoReconnect = true;
 
@@ -560,11 +479,7 @@ function toggleConnect() {
   connect();
 })();
 
-// 连接按钮变为"手动重连"（一般不需要）
-document.getElementById("connectBtn").onclick = function() {
-  autoReconnect = true;
-  connect();
-};
+// 连接通过悬浮球菜单 toggleConnect 控制（页面加载自动连接）
 
 // 模式切换
 document.getElementById("modeWheel").onclick = () => setMode("wheel");
