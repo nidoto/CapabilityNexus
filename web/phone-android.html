@@ -248,9 +248,13 @@
 <div id="dragBall">🔒</div>
 <div id="ballMenu">
   <div class="menu-label">悬浮球菜单</div>
+  <button id="menuConnect">🔌 连接 / 断开</button>
   <button id="menuFullscreen">⛶ 全屏</button>
   <button id="menuLock">🔒 锁定 / 解锁</button>
-  <button id="menuCal">🎯 校准</button>
+  <button id="menuCalAll">🎯 一键校准</button>
+  <button id="menuCalSteer">↔ 校准方向盘</button>
+  <button id="menuCalGas">🛞 校准油门</button>
+  <button id="menuCalBrake">⛔ 校准刹车</button>
   <button id="menuClose">✕ 关闭菜单</button>
 </div>
 
@@ -349,6 +353,21 @@ function updateBall() {
   ballY = Math.max(0, Math.min(vh - 56, ballY));
   dragBall.style.left = ballX + "px";
   dragBall.style.top = ballY + "px";
+
+  // 靠近边缘时显示箭头提示（点击会向屏幕内侧弹出菜单）
+  if (ballY < 30) {
+    dragBall.textContent = "▲";   // 顶部边缘 → 向下弹菜单
+  } else if (ballY > vh - 86) {
+    dragBall.textContent = "▼";   // 底部边缘 → 向上弹菜单
+  } else if (ballX < 30) {
+    dragBall.textContent = "◀";   // 左侧边缘 → 向右弹菜单
+  } else if (ballX > vw - 86) {
+    dragBall.textContent = "▶";   // 右侧边缘 → 向左弹菜单
+  } else if (!locked) {
+    dragBall.textContent = "🔒";  // 中间 → 锁图标（未锁定）
+  } else {
+    dragBall.textContent = "🔓";  // 中间 → 解锁图标（已锁定）
+  }
 }
 
 // 初始化悬浮球位置
@@ -362,7 +381,6 @@ function setLocked(state) {
   locked = state;
   lockOverlay.classList.toggle("on", state);
   ballMenu.classList.remove("on");
-  dragBall.textContent = state ? "🔓" : "🔒";
   // 锁定/解锁后小球保持在原位置（或锁定后移到中间偏下方便解锁）
   if (state) {
     ballX = window.innerWidth / 2 - 28;
@@ -414,7 +432,7 @@ window.addEventListener("pointercancel", function() {
 
 // 悬浮球菜单
 function openBallMenu() {
-  var mw = 150, mh = 4 * 40;
+  var mw = 150, mh = 9 * 38;
   var mx = Math.min(ballX, window.innerWidth - mw);
   var my = Math.min(ballY, window.innerHeight - mh);
   ballMenu.style.left = mx + "px";
@@ -422,6 +440,10 @@ function openBallMenu() {
   ballMenu.classList.add("on");
 }
 
+document.getElementById("menuConnect").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  toggleConnect();
+});
 document.getElementById("menuFullscreen").addEventListener("click", function() {
   ballMenu.classList.remove("on");
   toggleFullscreen();
@@ -430,9 +452,21 @@ document.getElementById("menuLock").addEventListener("click", function() {
   ballMenu.classList.remove("on");
   setLocked(!locked);
 });
-document.getElementById("menuCal").addEventListener("click", function() {
+document.getElementById("menuCalAll").addEventListener("click", function() {
   ballMenu.classList.remove("on");
-  calibrate();
+  calibrateAll();
+});
+document.getElementById("menuCalSteer").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  calibrateSteer();
+});
+document.getElementById("menuCalGas").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  calibrateGas();
+});
+document.getElementById("menuCalBrake").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  calibrateBrake();
 });
 document.getElementById("menuClose").addEventListener("click", function() {
   ballMenu.classList.remove("on");
@@ -490,6 +524,19 @@ function scheduleReconnect() {
   }, 2000);
 }
 
+// 悬浮球菜单：连接 / 断开
+function toggleConnect() {
+  if (connected) {
+    autoReconnect = false;
+    try { ws.close(); } catch (e) {}
+    connected = false;
+    setStatus("已断开", false);
+  } else {
+    autoReconnect = true;
+    connect();
+  }
+}
+
 // 页面加载后自动连接，无需点击
 (function() {
   addrInput.value = (location.protocol === "https:" ? "wss://" : "ws://") + window.location.host + "/ws";
@@ -525,27 +572,55 @@ let gas = 0, brake = 0;
 let gyroAvailable = false;
 let currentSteer = 0;   // 方向盘角度（校准后）
 let currentPitch = 0;   // 俯仰（校准后）
-let calOffset = { alpha: 0, beta: 0, gamma: 0, has: false };
+let cal = { alpha: 0, beta: 0, gamma: 0, gas: 0, brake: 0, has: false };
 const buttons = { a: false, b: false, x: false, y: false };
 const dpad = { up: false, down: false, left: false, right: false };
 
-// 校准：以当前姿态为 0 点（记录偏移，发送相对值）
-function calibrate() {
+// 校准工具：记录当前传感器值为起点
+function snapOffset() {
+  return { alpha: rawAlpha, beta: rawBeta, gamma: rawGamma };
+}
+
+// 一键校准：方向盘、油门、刹车都用当前值作起点
+function calibrateAll() {
   if (!gyroAvailable) {
     setStatus("陀螺仪不可用，无法校准（请使用 HTTPS）", false);
     return;
   }
-  calOffset = {
-    alpha: rawAlpha,
-    beta: rawBeta,
-    gamma: rawGamma,
-    has: true,
-  };
+  var off = snapOffset();
+  cal.alpha = off.alpha;
+  cal.beta = off.beta;
+  cal.gamma = off.gamma;
+  cal.gas = off.beta;     // 油门起点 = 当前前后倾
+  cal.brake = off.alpha;  // 刹车起点 = 当前上下倾
+  cal.has = true;
   currentSteer = 0;
   currentPitch = 0;
   updateWheel();
   sendAll();
-  setStatus("已校准：当前姿态为 0 点", true);
+  setStatus("一键校准完成：方向盘/油门/刹车已归零", true);
+}
+
+// 单独校准
+function calibrateSteer() {
+  if (!gyroAvailable) return setStatus("陀螺仪不可用", false);
+  cal.gamma = rawGamma;
+  cal.has = true;
+  currentSteer = 0;
+  updateWheel(); sendAll();
+  setStatus("方向盘已校准（当前为 0 点）", true);
+}
+function calibrateGas() {
+  if (!gyroAvailable) return setStatus("陀螺仪不可用", false);
+  cal.gas = rawBeta;
+  cal.has = true;
+  setStatus("油门已校准（当前前后倾为油门 0）", true);
+}
+function calibrateBrake() {
+  if (!gyroAvailable) return setStatus("陀螺仪不可用", false);
+  cal.brake = rawAlpha;
+  cal.has = true;
+  setStatus("刹车已校准（当前上下倾为刹车 0）", true);
 }
 
 // 设备方向（陀螺仪）
@@ -554,27 +629,31 @@ function handleOrientation(e) {
     gyroAvailable = true;
     setStatus(connected ? "已连接（陀螺仪可用，可校准）" : "自动连接中...", connected);
   }
-  rawAlpha = e.alpha || 0;   // 绕 Z 轴（指南针）
-  rawBeta = e.beta || 0;     // 绕 X 轴（前后倾斜）
-  rawGamma = e.gamma || 0;   // 绕 Y 轴（左右倾斜）
+  rawAlpha = e.alpha || 0;   // 绕 Z 轴（上下倾 → 刹车）
+  rawBeta = e.beta || 0;     // 绕 X 轴（前后倾 → 油门）
+  rawGamma = e.gamma || 0;   // 绕 Y 轴（左右倾 → 方向盘）
 
   // 校准偏移：发送值 = 原始值 - 校准偏移
-  var a = rawAlpha, b = rawBeta, g = rawGamma;
-  if (calOffset.has) {
-    a = rawAlpha - calOffset.alpha;
-    b = rawBeta - calOffset.beta;
-    g = rawGamma - calOffset.gamma;
+  var g = rawGamma, b = rawBeta, a = rawAlpha;
+  if (cal.has) {
+    g = rawGamma - cal.gamma;
+    b = rawBeta - cal.gas;
+    a = rawAlpha - cal.brake;
   }
 
-  // 方向轴：gamma 是左右倾斜（方向盘转向）；beta 是前后倾斜（油门/刹车）
+  // 方向轴：
+  //   方向盘 = gamma（左右倾斜），左/右各 180° 为极限
+  //   油门   = beta（前后倾斜），前移大、后移小
+  //   刹车   = alpha（上下倾），上移松、下移踩
   yaw = a; roll = g; pitch = b;
   currentSteer = roll;
   currentPitch = pitch;
 
-  // 前后倾斜 → 油门/刹车（仅当没有点按踏板时）
+  // 油门：前移（beta 正）→ 油门大；后移（beta 负）→ 油门小（仅无点按时）
+  // 刹车：alpha 校准后，下移（alpha 增）→ 踩；上移（alpha 减）→ 松
   if (!gasPressed && !brakePressed) {
-    gas = clamp((pitch - 5) / 40, 0, 1);
-    brake = clamp((-pitch - 5) / 40, 0, 1);
+    gas = clamp((b - 2) / 35, 0, 1);     // 前倾油门
+    brake = clamp((a + 2) / 35, 0, 1);   // 下倾刹车（alpha 增加 = 下移）
   }
 
   // 显示原始值
