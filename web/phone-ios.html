@@ -21,15 +21,13 @@
     gap: 10px;
     background: #1e293b;
   }
-  .top input {
-    flex: 1;
-    padding: 8px;
-    border: 1px solid #334155;
-    border-radius: 6px;
-    background: #0f172a;
-    color: #e2e8f0;
+  .top-center {
+    display: flex;
+    gap: 10px;
+    margin: 0 auto;
   }
   .top button {
+    flex-shrink: 0;
     padding: 8px 12px;
     border: none;
     border-radius: 6px;
@@ -46,31 +44,16 @@
   }
   #lockOverlay.on { display: block; }
 
-  /* 悬浮球：始终最顶层，可拖动，功能菜单入口 */
-  #dragBall {
-    position: fixed;
-    left: 8px;
-    top: 10px;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: #22c55e;
-    color: #fff;
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10001;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-    cursor: pointer;
-    opacity: 0.92;
+  /* 锁定放行区：游戏控制（油门/刹车扇形、地图、菜单）在锁定时置于遮罩之上仍可操作。
+     放行与元素绑定，控制形状变化（如扇形改圆形）自动跟随 */
+  body.locked .lock-allow {
+    z-index: 10001 !important;
   }
-  #dragBall:active { transform: scale(1.1); }
+  body.locked button.lock-allow {
+    position: relative;
+  }
 
-  /* 悬浮球菜单 */
+  /* 菜单弹层：从顶部“菜单”按钮下方弹出 */
   #ballMenu {
     position: fixed;
     z-index: 10002;
@@ -96,6 +79,7 @@
     border-radius: 8px;
   }
   #ballMenu button:active { background: #334155; }
+  #ballMenu button.current { background: #7c3aed; color: #fff; }
   #ballMenu .menu-label {
     padding: 4px 14px;
     font-size: 12px;
@@ -107,24 +91,6 @@
   }
   .ok { color: #4ade80; }
   .err { color: #f87171; }
-
-  .mode-row {
-    padding: 6px 14px;
-    display: flex;
-    gap: 8px;
-  }
-  .mode-row button {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #334155;
-    border-radius: 8px;
-    background: #1e293b;
-    color: #cbd5e1;
-  }
-  .mode-row button.active {
-    background: #2563eb;
-    color: #fff;
-  }
 
   .sensor-box {
     margin: 12px 14px;
@@ -152,7 +118,7 @@
     align-items: center;
     justify-content: center;
     position: relative;
-    transition: transform 0.05s linear;
+    transition: transform 0.01s linear;
   }
   .wheel .hub {
     width: 60px;
@@ -189,6 +155,12 @@
     color: #e2e8f0;
   }
   .btn.pressed { background: #2563eb; color: #fff; }
+
+  /* 模式内容区：默认仅显示激活项 */
+  #wheelMode, #padMode { display: none; }
+  #wheelMode.active { display: block; }
+  #padMode.active { display: block; }
+
   .dpad {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -227,64 +199,280 @@
     top: 8px;
     font-weight: bold;
   }
+
+  /* 刹车拖动条：默认底部 0 向上拖增加（10 档刻度），反转后顶部 0 向下拖增加 */
+  .pedal.brake {
+    touch-action: none;
+    cursor: pointer;
+  }
+  .pedal.brake .tick {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.25);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .pedal.brake .brake-value {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 28px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    z-index: 3;
+    pointer-events: none;
+  }
+  .pedal.brake .brake-value.small { font-size: 13px; color: #fca5a5; }
+  .pedal.brake .fill { position: relative; z-index: 1; }
+  .pedal.brake.dragging { border-color: #f87171; }
+  .pedal.brake.dragging .fill { background: #dc2626; }
+  /* 反转：fill 从顶部向下填充，刻度从顶部算起 */
+  .pedal.brake.inverted { align-items: flex-start; }
+  .pedal.brake.inverted .brake-value { top: 28px; bottom: auto; }
+
+  /* 油门拖动条（触摸油门方案）：与刹车一致，默认底部 0 向上拖增加（10 档） */
+  .pedal.gas {
+    touch-action: none;
+    cursor: pointer;
+  }
+  .pedal.gas .tick {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.25);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .pedal.gas .gas-value {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 28px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    z-index: 3;
+    pointer-events: none;
+  }
+  .pedal.gas .gas-value.small { font-size: 13px; color: #86efac; }
+  .pedal.gas .fill { position: relative; z-index: 1; }
+  .pedal.gas.dragging { border-color: #4ade80; }
+  .pedal.gas.dragging .fill { background: #16a34a; }
+  /* 反转：fill 从顶部向下填充，刻度从顶部算起 */
+  .pedal.gas.inverted { align-items: flex-start; }
+  .pedal.gas.inverted .gas-value { top: 28px; bottom: auto; }
+
+  /* 触摸油门方案：油门增益不再生效，隐藏输入框 */
+  #wheelMode.active.touch-scheme #gasGainRow { display: none; }
+
+  /* 传感器框内的参数输入框（方向盘最大角度 / 油门增益） */
+  .sensor-box input[type="number"] {
+    width: 64px;
+    padding: 3px 6px;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #38bdf8;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  /* 横屏布局：方向盘左侧，传感器/油门/刹车右侧，避免内容超出屏幕 */
+  @media (orientation: landscape) and (max-height: 560px) {
+    .top { padding: 6px 10px; gap: 6px; }
+    .status { padding: 4px 10px; font-size: 12px; }
+
+    #wheelMode.active {
+      display: flex;
+      align-items: stretch;
+      padding: 6px 10px;
+      gap: 8px;
+    }
+    #wheelMode.active .wheel {
+      width: 130px;
+      height: 130px;
+      margin: 0;
+      flex-shrink: 0;
+      align-self: center;
+    }
+    #wheelMode.active .wheel .hub { width: 44px; height: 44px; font-size: 12px; }
+    #wheelMode.active .sensor-box {
+      flex: 1;
+      margin: 0;
+      padding: 8px 10px;
+    }
+    #wheelMode.active .sensor-box .sensor-row { padding: 2px 0; }
+    #wheelMode.active .pedals {
+      padding: 0;
+      flex: 1;
+      align-items: stretch;
+    }
+    #wheelMode.active .pedal { height: auto; min-height: 0; }
+    #wheelMode.active .pedal.brake { min-height: 90px; }
+    /* 触摸方案横屏：油门/刹车为贴底扇形（圆心在屏幕左下/右下角），方向盘+信息版居中 */
+    #wheelMode.active.touch-scheme .pedals { display: contents; }
+    #wheelMode.active.touch-scheme {
+      justify-content: center;
+      align-items: center;
+    }
+    /* 刹车扇形：圆心=屏幕左下角，贴底 */
+    #wheelMode.active.touch-scheme .pedal.brake {
+      position: fixed;
+      left: 0;
+      bottom: 0;
+      width: 250px;
+      height: 250px;
+      border-top-right-radius: 100%;
+      z-index: 20;
+      order: 1;
+    }
+    /* 油门扇形：圆心=屏幕右下角，贴底 */
+    #wheelMode.active.touch-scheme .pedal.gas {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      width: 250px;
+      height: 250px;
+      border-top-left-radius: 100%;
+      z-index: 20;
+      order: 4;
+    }
+    /* 扇形内标签移到贴底侧（顶部区域被扇形裁掉） */
+    #wheelMode.active.touch-scheme .pedal .label {
+      top: auto;
+      bottom: 8px;
+    }
+    /* 中间方向盘 + 信息版缩小，避免与两侧扇形重叠 */
+    #wheelMode.active.touch-scheme .wheel {
+      order: 2;
+      width: 100px;
+      height: 100px;
+    }
+    #wheelMode.active.touch-scheme .wheel .hub {
+      width: 34px;
+      height: 34px;
+      font-size: 10px;
+    }
+    #wheelMode.active.touch-scheme .sensor-box {
+      order: 3;
+      flex: 0 1 auto;
+      max-width: 170px;
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+    #wheelMode.active.touch-scheme .sensor-box .sensor-row { padding: 1px 0; }
+    #wheelMode.active.touch-scheme .sensor-box input[type="number"] { width: 46px; }
+
+    #padMode.active {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+    }
+    #padMode.active .dpad {
+      flex: 1;
+      max-width: none;
+      margin: 0;
+      padding: 4px;
+    }
+    #padMode.active .dpad .btn { padding: 10px 0; font-size: 13px; }
+    #padMode.active .controls {
+      flex: 1;
+      padding: 4px;
+      gap: 8px;
+    }
+    #padMode.active .controls .btn { padding: 14px 0; font-size: 16px; }
+  }
 </style>
 </head>
 <body>
 
 <div class="top">
-  <input id="addr" type="text" value="" placeholder="自动使用当前地址（也可手动填 ws://PC-IP:8765/ws）">
+  <button id="menuButton">⋯ 更多</button>
+  <div class="top-center">
+    <button id="lockButton" class="lock-allow">🔒 锁定</button>
+    <button id="mapButton" class="lock-allow">🗺 地图</button>
+    <button id="startButton" class="lock-allow">☰ 菜单</button>
+  </div>
+  <button id="saveButton">💾 保存</button>
 </div>
 
 <div class="status" id="status">未连接</div>
 
-<!-- 锁定遮罩（悬浮球下层，覆盖全屏拦截触摸） -->
+<!-- 锁定遮罩（覆盖全屏拦截触摸） -->
 <div id="lockOverlay"></div>
 
-<!-- 悬浮球：固定于左上角，点击弹出功能菜单 -->
-<div id="dragBall">🔒</div>
+<!-- 菜单弹层（由顶部“菜单”按钮控制） -->
 <div id="ballMenu">
-  <div class="menu-label">悬浮球菜单</div>
+  <div class="menu-label">模式</div>
+  <button id="menuModeWheel" class="current">🛞 方向盘</button>
+  <button id="menuModePad">🎮 手柄</button>
+  <div class="menu-label">按键布局</div>
+  <button id="menuLayoutGyro" class="current">🛞 陀螺仪油门</button>
+  <button id="menuLayoutTouch">🖐 触摸油门</button>
+  <div class="menu-label">连接</div>
   <button id="menuConnect">🔌 连接 / 断开</button>
   <button id="menuFullscreen">⛶ 全屏</button>
   <button id="menuLock">🔒 锁定 / 解锁</button>
+  <div class="menu-label">校准</div>
   <button id="menuCalAll">🎯 一键校准</button>
   <button id="menuCalSteer">↔ 校准方向盘</button>
   <button id="menuCalGas">🛞 校准油门</button>
   <button id="menuCalBrake">⛔ 校准刹车</button>
+  <div class="menu-label">反转</div>
+  <button id="menuInvAll">🔃 一键反转（三个同时）</button>
+  <button id="menuInvSteer">↔ 反转方向盘</button>
+  <button id="menuInvGas">↑ 反转油门</button>
+  <button id="menuInvBrake">↓ 反转刹车</button>
+  <div class="menu-label">测试</div>
+  <button id="menuTestVibrate">📳 测试震动</button>
   <button id="menuClose">✕ 关闭菜单</button>
 </div>
 
-<div class="mode-row">
-  <button id="modeWheel" class="active">方向盘</button>
-  <button id="modePad">手柄</button>
-</div>
-
 <!-- 方向盘模式 -->
-<div id="wheelMode">
+<div id="wheelMode" class="active">
   <div class="wheel" id="wheel">
     <div class="spoke"></div>
     <div class="hub">STEER</div>
   </div>
   <div class="sensor-box">
+    <div class="sensor-row">
+      <span>左右合计角度</span>
+      <input id="wheelMaxInput" type="number" min="20" max="720" step="10" value="90" inputmode="numeric">
+    </div>
+    <div class="sensor-row" id="gasGainRow">
+      <span>油门增益</span>
+      <input id="gasGainInput" type="number" min="0.1" max="10" step="0.1" value="1" inputmode="decimal">
+    </div>
     <div class="sensor-row"><span>Steer (方向)</span><span id="v_roll">0.0</span></div>
     <div class="sensor-row"><span>Tilt (油门/刹车)</span><span id="v_pitch">0.0</span></div>
     <div class="sensor-row"><span>原始 α/β/γ</span><span id="v_raw">0 / 0 / 0</span></div>
     <button id="calBtn" style="width:100%;margin-top:8px;padding:10px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-weight:bold;">校准（以当前姿态为 0 点）</button>
   </div>
   <div class="pedals">
-    <div class="pedal gas">
+    <div class="pedal gas lock-allow" id="gasBar">
       <div class="fill" id="gasFill" style="height:0%"></div>
+      <div class="gas-value" id="gasValue">0</div>
       <div class="label">油门</div>
     </div>
-    <div class="pedal brake">
+    <div class="pedal brake lock-allow" id="brakeBar">
       <div class="fill" id="brakeFill" style="height:0%"></div>
+      <div class="brake-value" id="brakeValue">0</div>
       <div class="label">刹车</div>
     </div>
   </div>
 </div>
 
 <!-- 手柄模式 -->
-<div id="padMode" style="display:none">
+<div id="padMode">
   <div class="dpad">
     <div></div>
     <button class="btn" id="dpad_up" data-btn="up">▲</button>
@@ -308,8 +496,10 @@
 let ws = null;
 let connected = false;
 let mode = "wheel";
+// 控制方案：gyro = 陀螺仪油门（方向盘+油门都用陀螺仪，刹车触摸）
+//            touch = 触摸油门（方向盘陀螺仪，油门/刹车都是触摸拖动 10 档）
+let scheme = "gyro";
 
-const addrInput = document.getElementById("addr");
 const statusEl = document.getElementById("status");
 
 function setStatus(text, ok) {
@@ -321,29 +511,118 @@ function setStatus(text, ok) {
 function toggleFullscreen() {
   var doc = document.documentElement;
   if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-    (doc.requestFullscreen || doc.webkitRequestFullscreen || function() {}).call(doc);
+    var req = doc.requestFullscreen || doc.webkitRequestFullscreen || function() {};
+    var p = req.call(doc);
+    if (p && typeof p.then === "function") {
+      p.then(function() { lockCurrentOrientation(); }).catch(function() {});
+    } else {
+      lockCurrentOrientation();
+    }
   } else {
     (document.exitFullscreen || document.webkitExitFullscreen || function() {}).call(document);
   }
 }
 
-// ---- 悬浮球（固定左上角；点击弹出功能菜单） ----
+// ---- 方向锁定：进入全屏后锁定当前横/竖屏，退出全屏后解锁 ----
+// iOS Safari 不支持 screen.orientation.lock，会提示改用系统方向锁
+function lockCurrentOrientation() {
+  var so = screen.orientation || screen.mozOrientation || screen.msOrientation;
+  if (!so || typeof so.lock !== "function") {
+    setStatus("iOS 浏览器无法锁定屏幕方向，请在控制中心开启方向锁定", false);
+    return false;
+  }
+  var type = (window.innerWidth > window.innerHeight) ? "landscape" : "portrait";
+  try {
+    var p = so.lock(type);
+    if (p && typeof p.catch === "function") p.catch(function() {});
+    return true;
+  } catch (e) {
+    setStatus("锁定屏幕方向失败: " + e.message, false);
+    return false;
+  }
+}
+
+function unlockScreenOrientation() {
+  var so = screen.orientation || screen.mozOrientation || screen.msOrientation;
+  if (so && typeof so.unlock === "function") {
+    try { so.unlock(); } catch (e) {}
+  }
+}
+
+document.addEventListener("fullscreenchange", function() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    lockCurrentOrientation();
+  } else {
+    unlockScreenOrientation();
+  }
+});
+
+// ---- 顶部手柄映射按钮：地图=Back、菜单=Start（纯按键，无菜单功能） ----
 var lockOverlay = document.getElementById("lockOverlay");
-var dragBall = document.getElementById("dragBall");
+var mapButton = document.getElementById("mapButton");
+var startButton = document.getElementById("startButton");
+var menuButton = document.getElementById("menuButton");  // "更多"：弹出功能菜单
 var ballMenu = document.getElementById("ballMenu");
 var locked = false;
 
 function setLocked(state) {
   locked = state;
   lockOverlay.classList.toggle("on", state);
+  document.body.classList.toggle("locked", state);
   ballMenu.classList.remove("on");
-  dragBall.textContent = state ? "🔓" : "🔒";
+  var lb = document.getElementById("lockButton");
+  if (lb) lb.textContent = state ? "🔓 解锁" : "🔒 锁定";
 }
 
-// 点击悬浮球：弹出菜单
-dragBall.addEventListener("click", function(e) {
+// 地图按钮 = X360 Back 键（按住发送，松开释放）
+mapButton.addEventListener("pointerdown", function(e) {
+  e.preventDefault();
+  buttons.back = true;
+  sendAll();
+});
+mapButton.addEventListener("pointerup", function() {
+  buttons.back = false;
+  sendAll();
+});
+mapButton.addEventListener("pointercancel", function() {
+  buttons.back = false;
+  sendAll();
+});
+
+// 菜单按钮 = X360 Start 键（按住发送，松开释放）
+startButton.addEventListener("pointerdown", function(e) {
+  e.preventDefault();
+  buttons.start = true;
+  sendAll();
+});
+startButton.addEventListener("pointerup", function() {
+  buttons.start = false;
+  sendAll();
+});
+startButton.addEventListener("pointercancel", function() {
+  buttons.start = false;
+  sendAll();
+});
+
+// 锁定按钮（唯一在锁屏下仍可用的功能键，lock-allow）：点击切换锁定/解锁
+document.getElementById("lockButton").addEventListener("click", function() {
+  setLocked(!locked);
+});
+
+// "更多"按钮：弹出功能菜单（无手柄映射）
+menuButton.addEventListener("click", function(e) {
   e.stopPropagation();
+  if (ballMenu.classList.contains("on")) {
+    ballMenu.classList.remove("on");
+    return;
+  }
   openBallMenu();
+});
+
+// "保存"按钮：保存当前网页配置到服务端（手机名归档，下次自动加载）
+document.getElementById("saveButton").addEventListener("click", function() {
+  saveConfig();
+  setStatus("配置已保存", true);
 });
 
 // 点遮罩空白处关闭菜单
@@ -355,18 +634,18 @@ lockOverlay.addEventListener("pointerdown", function(e) {
 });
 
 
-// 悬浮球菜单
+// 菜单
 function openBallMenu() {
-  // 先显示再测量真实尺寸，避免横屏高度不足
-  ballMenu.style.display = "flex";
+  // 先加 .on 让 CSS 显示，再测量真实尺寸定位
+  ballMenu.classList.add("on");
   var mw = ballMenu.offsetWidth;
   var mh = ballMenu.offsetHeight;
   var vw = window.innerWidth, vh = window.innerHeight;
 
-  // 菜单优先出现在悬浮球上方；空间不足则放下方
-  var mx = ballX + 56;
-  var my = ballY - mh;
-  if (my < 4) my = ballY + 56;
+  // 菜单定位在顶部“菜单”按钮正下方
+  var rect = menuButton.getBoundingClientRect();
+  var mx = rect.left;
+  var my = rect.bottom + 4;
   mx = Math.min(mx, vw - mw - 4);
   my = Math.min(my, vh - mh - 4);
   if (mx < 4) mx = 4;
@@ -374,8 +653,6 @@ function openBallMenu() {
 
   ballMenu.style.left = mx + "px";
   ballMenu.style.top = my + "px";
-  ballMenu.style.display = "none";
-  ballMenu.classList.add("on");
 }
 
 document.getElementById("menuConnect").addEventListener("click", function() {
@@ -406,6 +683,63 @@ document.getElementById("menuCalBrake").addEventListener("click", function() {
   ballMenu.classList.remove("on");
   calibrateBrake();
 });
+document.getElementById("menuInvAll").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  invert.steer = !invert.steer;
+  invert.gas = !invert.gas;
+  invert.brake = !invert.brake;
+  if (typeof renderBrakeTicks === "function") renderBrakeTicks();
+  if (typeof renderGasTicks === "function") renderGasTicks();
+  setStatus("已一键反转（方向盘/油门/刹车）", true);
+  updateWheel();
+  sendAll();
+  saveConfig();
+});
+document.getElementById("menuInvSteer").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  invert.steer = !invert.steer;
+  setStatus("方向盘方向：" + (invert.steer ? "已反转" : "已还原"), true);
+  updateWheel();
+  sendAll();
+  saveConfig();
+});
+document.getElementById("menuInvGas").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  invert.gas = !invert.gas;
+  if (typeof renderGasTicks === "function") renderGasTicks();
+  setStatus("油门方向：" + (invert.gas ? "已反转" : "已还原"), true);
+  updateWheel();
+  sendAll();
+  saveConfig();
+});
+document.getElementById("menuInvBrake").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  invert.brake = !invert.brake;
+  if (typeof renderBrakeTicks === "function") renderBrakeTicks();
+  setStatus("刹车方向：" + (invert.brake ? "已反转（上→下）" : "已还原（下→上）"), true);
+  updateWheel();
+  sendAll();
+  saveConfig();
+});
+// 按键布局：陀螺仪油门 / 触摸油门（与方向盘模式顶部的方案切换同步）
+document.getElementById("menuLayoutGyro").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  setScheme("gyro");
+});
+document.getElementById("menuLayoutTouch").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  setScheme("touch");
+});
+// 测试震动：直接调用手机振动（不依赖服务端，验证手机振动硬件可用）
+document.getElementById("menuTestVibrate").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  if (navigator.vibrate) {
+    navigator.vibrate(300);
+    setStatus("已测试震动 300ms", true);
+  } else {
+    setStatus("此浏览器不支持 navigator.vibrate（iOS Safari 不支持）", false);
+  }
+});
 document.getElementById("menuClose").addEventListener("click", function() {
   ballMenu.classList.remove("on");
 });
@@ -425,7 +759,6 @@ let autoReconnect = true;
 function connect() {
   // 始终使用当前页面主机（自动匹配 PC IP + 端口）
   let url = (location.protocol === "https:" ? "wss://" : "ws://") + window.location.host + "/ws";
-  addrInput.value = url;
   if (!url) return;
   try {
     ws = new WebSocket(url);
@@ -439,6 +772,17 @@ function connect() {
     setStatus("已连接: " + url, true);
     sendHello();
     sendAll();
+  };
+  ws.onmessage = (ev) => {
+    try {
+      var msg = JSON.parse(ev.data);
+      if (msg.t === "config" && msg.config) {
+        applySavedConfig(msg.config);
+      } else if (msg.t === "vibrate" && navigator.vibrate) {
+        // 游戏请求震动（HTTPS secure context 下可用）
+        navigator.vibrate(msg.duration_ms || 80);
+      }
+    } catch (e) {}
   };
   ws.onclose = () => {
     connected = false;
@@ -459,7 +803,7 @@ function scheduleReconnect() {
   }, 2000);
 }
 
-// 悬浮球菜单：连接 / 断开
+// 菜单：连接 / 断开
 function toggleConnect() {
   if (connected) {
     autoReconnect = false;
@@ -474,25 +818,46 @@ function toggleConnect() {
 
 // 页面加载后自动连接（iOS 需用户授权传感器后才启动 WS）
 (function() {
-  addrInput.value = (location.protocol === "https:" ? "wss://" : "ws://") + window.location.host + "/ws";
   setStatus("自动连接中...", false);
   connect();
 })();
 
-// 连接通过悬浮球菜单 toggleConnect 控制（页面加载自动连接）
+// 连接通过菜单 toggleConnect 控制（页面加载自动连接）
 
-// 模式切换
-document.getElementById("modeWheel").onclick = () => setMode("wheel");
-document.getElementById("modePad").onclick = () => setMode("pad");
+// 模式切换（菜单入口）：方向盘 / 手柄
+document.getElementById("menuModeWheel").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  setMode("wheel");
+});
+document.getElementById("menuModePad").addEventListener("click", function() {
+  ballMenu.classList.remove("on");
+  setMode("pad");
+});
 
 function setMode(m) {
   mode = m;
-  document.getElementById("modeWheel").className = "mode-btn" + (m === "wheel" ? " active" : "");
-  document.getElementById("modePad").className = "mode-btn" + (m === "pad" ? " active" : "");
-  document.getElementById("wheelMode").style.display = m === "wheel" ? "block" : "none";
-  document.getElementById("padMode").style.display = m === "pad" ? "block" : "none";
-  document.getElementById("modeWheel").classList.toggle("active", m === "wheel");
-  document.getElementById("modePad").classList.toggle("active", m === "pad");
+  document.getElementById("wheelMode").classList.toggle("active", m === "wheel");
+  document.getElementById("padMode").classList.toggle("active", m === "pad");
+  document.getElementById("menuModeWheel").classList.toggle("current", m === "wheel");
+  document.getElementById("menuModePad").classList.toggle("current", m === "pad");
+}
+
+// 控制方案切换：陀螺仪油门 / 触摸油门
+function setScheme(s) {
+  scheme = s;
+  document.getElementById("wheelMode").classList.toggle("touch-scheme", s === "touch");
+  document.getElementById("menuLayoutGyro").classList.toggle("current", s === "gyro");
+  document.getElementById("menuLayoutTouch").classList.toggle("current", s === "touch");
+  if (typeof renderGasTicks === "function") renderGasTicks();
+  if (s === "touch") {
+    gasPressed = false;
+    gas = 0;
+    setGas(0);
+  }
+  setStatus("控制方案：" + (s === "gyro" ? "陀螺仪油门" : "触摸油门"), true);
+  updateWheel();
+  sendAll();
+  saveConfig();
 }
 
 // 传感器状态
@@ -504,8 +869,116 @@ let gyroAvailable = false;
 let currentSteer = 0;
 let currentPitch = 0;
 let cal = { alpha: 0, beta: 0, gamma: 0, gas: 0, brake: 0, has: false };
-const buttons = { a: false, b: false, x: false, y: false };
+// 横屏等场景下手动反转各轴方向（点按切换）
+const invert = { steer: false, gas: false, brake: false };
+const buttons = { a: false, b: false, x: false, y: false, back: false, start: false };
 const dpad = { up: false, down: false, left: false, right: false };
+
+// 用户可调参数：方向盘左右合计角度（默认 90°，参考 F1）与油门增益
+let wheelTotalAngle = 90;
+let gasGain = 1.0;
+
+function loadSettings() {
+  var wm = document.getElementById("wheelMaxInput");
+  if (wm && wm.value) {
+    var v = parseFloat(wm.value);
+    if (v >= 20 && v <= 720) wheelTotalAngle = v;
+  }
+  var gg = document.getElementById("gasGainInput");
+  if (gg && gg.value) {
+    var g = parseFloat(gg.value);
+    if (g > 0 && g <= 10) gasGain = g;
+  }
+}
+var _wmEl = document.getElementById("wheelMaxInput");
+if (_wmEl) _wmEl.addEventListener("input", loadSettings);
+var _ggEl = document.getElementById("gasGainInput");
+if (_ggEl) _ggEl.addEventListener("input", loadSettings);
+
+// ---- 手机配置保存/加载（服务端按手机名存档，下次连接自动恢复） ----
+function getConfig() {
+  return {
+    scheme: scheme,
+    invert: { steer: invert.steer, gas: invert.gas, brake: invert.brake },
+    wheel_max_angle: wheelTotalAngle,
+    gas_gain: gasGain,
+  };
+}
+
+function applySavedConfig(cfg) {
+  if (!cfg) return;
+  if (cfg.scheme === "gyro" || cfg.scheme === "touch") {
+    scheme = cfg.scheme;
+    document.getElementById("wheelMode").classList.toggle("touch-scheme", scheme === "touch");
+    document.getElementById("menuLayoutGyro").classList.toggle("current", scheme === "gyro");
+    document.getElementById("menuLayoutTouch").classList.toggle("current", scheme === "touch");
+  }
+  if (cfg.invert) {
+    invert.steer = !!cfg.invert.steer;
+    invert.gas = !!cfg.invert.gas;
+    invert.brake = !!cfg.invert.brake;
+  }
+  if (cfg.wheel_max_angle) {
+    var wm = parseFloat(cfg.wheel_max_angle);
+    if (wm >= 20 && wm <= 720) {
+      wheelTotalAngle = wm;
+      var wmEl = document.getElementById("wheelMaxInput");
+      if (wmEl) wmEl.value = wm;
+    }
+  }
+  if (cfg.gas_gain) {
+    var gg = parseFloat(cfg.gas_gain);
+    if (gg > 0 && gg <= 10) {
+      gasGain = gg;
+      var ggEl = document.getElementById("gasGainInput");
+      if (ggEl) ggEl.value = gg;
+    }
+  }
+  if (typeof renderBrakeTicks === "function") renderBrakeTicks();
+  if (typeof renderGasTicks === "function") renderGasTicks();
+  setStatus("已加载本机配置", true);
+  updateWheel();
+  sendAll();
+}
+
+function saveConfig() {
+  if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+  try {
+    ws.send(JSON.stringify({ t: "config", config: getConfig() }));
+  } catch (e) {}
+}
+
+// 输入停止 500ms 后自动保存到服务端（无需手动点保存按钮）
+var _saveTimer = null;
+function scheduleSave() {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(function() {
+    _saveTimer = null;
+    saveConfig();
+    setStatus("配置已自动保存", true);
+  }, 500);
+}
+if (_wmEl) _wmEl.addEventListener("input", scheduleSave);
+if (_ggEl) _ggEl.addEventListener("input", scheduleSave);
+
+// 点击非输入框区域时让输入框失焦，避免键盘一直弹出（按刹车/方向盘时）
+document.addEventListener("pointerdown", function(e) {
+  var t = e.target;
+  var isInput = t && t.tagName === "INPUT";
+  var ae = document.activeElement;
+  if (!isInput && ae && ae.tagName === "INPUT") {
+    ae.blur();
+  }
+}, true);
+
+// 横置（掌机/方向盘握持）时用重力向量计算轴值
+function landscapeAxes() {
+  var G = Math.sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ) || 1;
+  var gx = accelX / G, gy = accelY / G, gz = accelZ / G;
+  var steer = Math.atan2(gy, gx) * 180 / Math.PI;
+  var tilt = Math.atan2(gz, Math.sqrt(gx * gx + gy * gy)) * 180 / Math.PI;
+  return { steer: steer, tilt: tilt };
+}
 
 // 一键校准：方向盘、油门、刹车都用当前值作起点
 function calibrateAll() {
@@ -518,6 +991,11 @@ function calibrateAll() {
   cal.gamma = rawGamma;
   cal.gas = rawBeta;
   cal.brake = rawAlpha;
+  if (window.innerWidth > window.innerHeight) {
+    var la = landscapeAxes();
+    cal.landSteer0 = la.steer;
+    cal.landGas0 = la.tilt;
+  }
   cal.has = true;
   currentSteer = 0;
   currentPitch = 0;
@@ -529,6 +1007,9 @@ function calibrateAll() {
 function calibrateSteer() {
   if (!gyroAvailable) return setStatus("陀螺仪不可用", false);
   cal.gamma = rawGamma;
+  if (window.innerWidth > window.innerHeight) {
+    cal.landSteer0 = landscapeAxes().steer;
+  }
   cal.has = true;
   currentSteer = 0;
   updateWheel(); sendAll();
@@ -537,15 +1018,23 @@ function calibrateSteer() {
 function calibrateGas() {
   if (!gyroAvailable) return setStatus("陀螺仪不可用", false);
   cal.gas = rawBeta;
+  if (window.innerWidth > window.innerHeight) {
+    cal.landGas0 = landscapeAxes().tilt;
+  }
   cal.has = true;
   setStatus("油门已校准（当前前后倾为油门 0）", true);
 }
 function calibrateBrake() {
   if (!gyroAvailable) return setStatus("陀螺仪不可用", false);
   cal.brake = rawAlpha;
+  if (window.innerWidth > window.innerHeight) {
+    cal.landGas0 = landscapeAxes().tilt;  // 油门/刹车共享前后轴
+  }
   cal.has = true;
   setStatus("刹车已校准（当前上下倾为刹车 0）", true);
 }
+
+// 轴方向反转：已改为菜单控制（一键反转 / 反转方向盘 / 反转油门 / 反转刹车）
 
 // iOS 需要 HTTPS + 用户授权
 (function() {
@@ -582,9 +1071,11 @@ function handleOrientation(e) {
     gyroAvailable = true;
     setStatus(connected ? "已连接（陀螺仪可用，可校准）" : "自动连接中...", connected);
   }
-  rawAlpha = e.alpha || 0;   // 绕 Z 轴（上下倾 → 刹车）
-  rawBeta = e.beta || 0;     // 绕 X 轴（前后倾 → 油门）
-  rawGamma = e.gamma || 0;   // 绕 Y 轴（左右倾 → 方向盘）
+  rawAlpha = e.alpha || 0;   // 绕 Z 轴
+  rawBeta = e.beta || 0;     // 绕 X 轴
+  rawGamma = e.gamma || 0;   // 绕 Y 轴
+
+  var landscape = window.innerWidth > window.innerHeight;
 
   // 校准偏移：发送值 = 原始值 - 校准偏移
   var a = rawAlpha, b = rawBeta, g = rawGamma;
@@ -594,19 +1085,48 @@ function handleOrientation(e) {
     a = rawAlpha - cal.brake;
   }
 
-  // 轴映射（与安卓统一）：
-  //   方向盘 = gamma（左右倾斜），iOS gamma 符号取反
-  //   油门   = beta（前后倾斜），前移大、后移小
-  //   刹车   = alpha（上下倾），上移松、下移踩
-  yaw = a;
-  roll = g * (-1);
-  pitch = b;
-  currentSteer = roll;
-  currentPitch = pitch;
+  if (landscape) {
+    // 横置双手握持（屏幕垂直于海平面，朝向眼睛，掌机/方向盘模式）：
+    //   方向盘 = 重力在屏幕平面的投影方向（绕屏幕法线旋转，±180°）
+    //   油门   = 手机前后仰（远离/靠近眼睛）
+    //   刹车   = 触屏拖动条（下方逻辑处理，不使用传感器轴）
+    var la = landscapeAxes();
+    var steer = la.steer;
+    var tilt = la.tilt;
+    if (cal.has && cal.landSteer0 !== undefined) steer -= cal.landSteer0;
+    if (cal.has && cal.landGas0 !== undefined) tilt -= cal.landGas0;
+    if (steer > 180) steer -= 360;
+    if (steer < -180) steer += 360;
 
-  if (!gasPressed && !brakePressed) {
-    gas = clamp((b - 2) / 35, 0, 1);     // 前倾油门
-    brake = clamp((a + 2) / 35, 0, 1);   // 下倾刹车
+    if (invert.steer) steer = -steer;
+    if (invert.gas) tilt = -tilt;
+
+    yaw = steer; roll = steer; pitch = tilt;
+    currentSteer = steer;
+    currentPitch = tilt;
+
+    if (scheme !== "touch" && !gasPressed) {
+      gas = clamp((tilt - 2) / 35, 0, 1);     // 后仰（放远）油门
+      gas = clamp(gas * gasGain, 0, 1);       // 应用用户增益
+    }
+  } else {
+    // 竖屏（或平放）：原有映射
+    //   方向盘 = gamma（左右倾斜），iOS gamma 符号取反
+    //   油门   = beta（前后倾斜），前移大、后移小
+    //   刹车   = 触屏拖动条（不使用传感器轴）
+    if (invert.steer) g = -g;
+    if (invert.gas) b = -b;
+
+    yaw = a;
+    roll = g * (-1);
+    pitch = b;
+    currentSteer = roll;
+    currentPitch = pitch;
+
+    if (scheme !== "touch" && !gasPressed) {
+      gas = clamp((b - 2) / 35, 0, 1);     // 前倾油门
+      gas = clamp(gas * gasGain, 0, 1);    // 应用用户增益
+    }
   }
 
   var rawEl = document.getElementById("v_raw");
@@ -636,42 +1156,218 @@ window.addEventListener("load", function() {
 // 校准按钮
 (function() {
   var calBtn = document.getElementById("calBtn");
-  if (calBtn) calBtn.addEventListener("click", calibrate);
+  if (calBtn) calBtn.addEventListener("click", calibrateAll);
 })();
 
-// ---- 触屏油门/刹车（按住时递增；始终可用） ----
+// ---- 触屏油门 / 刹车（刹车为可拖动比例条；油门按方案：陀螺仪或触摸拖动） ----
 var gasPressed = false, brakePressed = false;
 
 function pedalLoop() {
+  // 触摸油门方案：油门/刹车都由拖动条控制，此处无需处理
+  if (scheme === "touch") return;
   if (gasPressed) gas = clamp(gas + 0.08, 0, 1);
-  else if (brakePressed) brake = clamp(brake + 0.08, 0, 1);
-  else if (!gyroAvailable) {
-    gas = clamp(gas - 0.05, 0, 1);
-    brake = clamp(brake - 0.05, 0, 1);
+  else if (!gyroAvailable) gas = clamp(gas - 0.05, 0, 1);
+  updateWheel();
+  sendAll();
+}
+
+// 油门踏板（陀螺仪方案）：按住则踩下（无陀螺仪时的触屏降级）；触摸方案由拖动条接管
+var gasPressStart = 0;
+var TAP_MS = 250;
+
+function bindGasPedal(selector) {
+  var el = document.querySelector(selector);
+  if (!el) return;
+  el.addEventListener("pointerdown", function(e) {
+    e.preventDefault();
+    if (scheme === "touch") return;   // 触摸油门方案：由 gasBar 拖动处理
+    gasPressStart = Date.now();
+    gasPressed = true;
+    brakePressed = false;
+  });
+  el.addEventListener("pointerup", function() {
+    gasPressed = false;
+  });
+  el.addEventListener("pointercancel", function() {
+    gasPressed = false;
+  });
+}
+
+bindGasPedal(".pedal.gas");
+
+// 油门拖动条（触摸油门方案）：与刹车一致，默认底部 0 向上拖增加（10 档），松开回 0
+var GAS_LEVELS = 20;
+var gasBarEl = document.getElementById("gasBar");
+var gasDrag = false;
+var gasPointerId = null;
+
+// 按当前反转方向重建油门刻度线（仅触摸方案显示）
+function renderGasTicks() {
+  var ticks = gasBarEl.querySelectorAll(".tick");
+  for (var i = 0; i < ticks.length; i++) ticks[i].remove();
+  if (scheme !== "touch") return;
+  gasBarEl.classList.toggle("inverted", invert.gas);
+  for (var j = 1; j < GAS_LEVELS; j++) {
+    var tick = document.createElement("div");
+    tick.className = "tick";
+    if (invert.gas) {
+      // 反转：刻度从顶部往下（顶部 0，底部 100%）
+      tick.style.top = (j / GAS_LEVELS * 100) + "%";
+    } else {
+      tick.style.bottom = (j / GAS_LEVELS * 100) + "%";
+    }
+    gasBarEl.appendChild(tick);
+  }
+}
+renderGasTicks();
+
+function setGas(value) {
+  gas = clamp(value, 0, 1);
+  var el = document.getElementById("gasValue");
+  el.textContent = Math.round(gas * 100);
+  el.classList.toggle("small", gas < 0.1);
+  updateWheel();
+  sendAll();
+}
+
+gasBarEl.addEventListener("pointerdown", function(e) {
+  e.preventDefault();
+  if (scheme !== "touch") return;   // 陀螺仪方案下油门条仅作显示
+  gasDrag = true;
+  gasPointerId = e.pointerId;   // 记录发起油门的手指
+  gasPressed = false;
+  brakePressed = false;
+  gasBarEl.classList.add("dragging");
+  setGasFromY(e.clientY);
+});
+
+window.addEventListener("pointermove", function(e) {
+  if (!gasDrag) return;
+  // 只响应发起油门的那根手指，避免其他手指的移动干扰
+  if (e.pointerId !== gasPointerId) return;
+  setGasFromY(e.clientY);
+});
+
+function setGasFromY(clientY) {
+  var rect = gasBarEl.getBoundingClientRect();
+  var ratio;
+  if (invert.gas) {
+    // 反转：由上往下拉增加（顶部 0，底部 1）
+    ratio = (clientY - rect.top) / rect.height;
+  } else {
+    // 默认：由下往上拉增加（底部 0，顶部 1）
+    ratio = 1 - (clientY - rect.top) / rect.height;
+  }
+  ratio = clamp(ratio, 0, 1);
+  // 档位量化：1/20 ... 20/20
+  var level = Math.round(ratio * GAS_LEVELS);
+  setGas(level / GAS_LEVELS);
+}
+
+function gasRelease(e) {
+  if (!gasDrag) return;
+  // 只有发起油门的那根手指抬起/取消才释放；其他手指不影响
+  if (e && e.pointerId !== undefined && e.pointerId !== gasPointerId) return;
+  gasDrag = false;
+  gasPointerId = null;
+  gasPressed = false;
+  gasBarEl.classList.remove("dragging");
+  setGas(0);  // 松开回 0
+}
+window.addEventListener("pointerup", gasRelease);
+window.addEventListener("pointercancel", gasRelease);
+
+// 刹车拖动条：默认底部 0 向上拖增加（10 档），反转后顶部 0 向下拖增加，松开回 0
+var BRAKE_LEVELS = 20;
+var brakeBarEl = document.getElementById("brakeBar");
+var brakeDrag = false;
+var brakePointerId = null;
+
+// 按当前反转方向重建刻度线
+function renderBrakeTicks() {
+  var ticks = brakeBarEl.querySelectorAll(".tick");
+  for (var i = 0; i < ticks.length; i++) ticks[i].remove();
+  brakeBarEl.classList.toggle("inverted", invert.brake);
+  for (var j = 1; j < BRAKE_LEVELS; j++) {
+    var tick = document.createElement("div");
+    tick.className = "tick";
+    if (invert.brake) {
+      // 反转：刻度从顶部往下（顶部 0，底部 100%）
+      tick.style.top = (j / BRAKE_LEVELS * 100) + "%";
+    } else {
+      tick.style.bottom = (j / BRAKE_LEVELS * 100) + "%";
+    }
+    brakeBarEl.appendChild(tick);
+  }
+}
+renderBrakeTicks();
+
+function setBrake(value) {
+  brake = clamp(value, 0, 1);
+  var el = document.getElementById("brakeValue");
+  if (el) {
+    el.textContent = Math.round(brake * 100);
+    el.classList.toggle("small", brake < 0.1);
   }
   updateWheel();
   sendAll();
 }
 
-var gasEl = document.querySelector(".pedal.gas");
-var brakeEl = document.querySelector(".pedal.brake");
-if (gasEl) {
-  gasEl.addEventListener("pointerdown", function(e) { e.preventDefault(); gasPressed = true; brakePressed = false; });
-  gasEl.addEventListener("pointerup", function() { gasPressed = false; });
-  gasEl.addEventListener("pointercancel", function() { gasPressed = false; });
+brakeBarEl.addEventListener("pointerdown", function(e) {
+  e.preventDefault();
+  brakeDrag = true;
+  brakePointerId = e.pointerId;   // 记录发起刹车的手指
+  brakePressed = true;
+  gasPressed = false;
+  brakeBarEl.classList.add("dragging");
+  setBrakeFromY(e.clientY);
+});
+
+window.addEventListener("pointermove", function(e) {
+  if (!brakeDrag) return;
+  // 只响应发起刹车的那根手指，避免其他手指的移动干扰
+  if (e.pointerId !== brakePointerId) return;
+  setBrakeFromY(e.clientY);
+});
+
+function setBrakeFromY(clientY) {
+  var rect = brakeBarEl.getBoundingClientRect();
+  var ratio;
+  if (invert.brake) {
+    // 反转：由上往下拉增加（顶部 0，底部 1）
+    ratio = (clientY - rect.top) / rect.height;
+  } else {
+    // 默认：由下往上拉增加（底部 0，顶部 1）
+    ratio = 1 - (clientY - rect.top) / rect.height;
+  }
+  ratio = clamp(ratio, 0, 1);
+  // 档位量化：1/20 ... 20/20
+  var level = Math.round(ratio * BRAKE_LEVELS);
+  setBrake(level / BRAKE_LEVELS);
 }
-if (brakeEl) {
-  brakeEl.addEventListener("pointerdown", function(e) { e.preventDefault(); brakePressed = true; gasPressed = false; });
-  brakeEl.addEventListener("pointerup", function() { brakePressed = false; });
-  brakeEl.addEventListener("pointercancel", function() { brakePressed = false; });
+
+function brakeRelease(e) {
+  if (!brakeDrag) return;
+  // 只有发起刹车的那根手指抬起/取消才释放；其他手指（如同时点别处）不影响
+  if (e && e.pointerId !== undefined && e.pointerId !== brakePointerId) return;
+  brakeDrag = false;
+  brakePointerId = null;
+  brakePressed = false;
+  brakeBarEl.classList.remove("dragging");
+  setBrake(0);  // 松开回 0
 }
+window.addEventListener("pointerup", brakeRelease);
+window.addEventListener("pointercancel", brakeRelease);
 
 setInterval(pedalLoop, 50);
 
 function updateWheel() {
-  const steerDeg = clamp(currentSteer, -45, 45);
+  const landscape = window.innerWidth > window.innerHeight;
+  // 横置时方向盘为 ±180° 旋转，竖屏时限制在 ±45°（触屏手感）
+  const steerDeg = clamp(currentSteer, landscape ? -180 : -45, landscape ? 180 : 45);
   const wheel = document.getElementById("wheel");
-  wheel.style.transform = "rotate(" + (-steerDeg) + "deg)";
+  // 方向盘旋转跟随手机实际倾斜方向（与发送方向一致）
+  wheel.style.transform = "rotate(" + steerDeg + "deg)";
   document.getElementById("v_roll").textContent = currentSteer.toFixed(1);
   document.getElementById("v_pitch").textContent = currentPitch.toFixed(1);
 
@@ -721,12 +1417,13 @@ function deviceName() {
 
 function sendHello() {
   if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+  var caps = ["gyroscope", "accelerometer", "buttons", "dpad", "gas", "brake"];
+  if (navigator.vibrate) caps.push("vibration");
+  if (navigator.geolocation) caps.push("gps");
   var payload = {
     t: "hello",
     name: deviceName(),
-    capabilities: [
-      "gyroscope", "accelerometer", "buttons", "dpad", "gas", "brake"
-    ]
+    capabilities: caps
   };
   ws.send(JSON.stringify(payload));
 }
@@ -734,12 +1431,13 @@ function sendHello() {
 function sendAll() {
   if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
   const now = performance.now();
-  if (now - lastSend < 20) return; // ~50Hz 节流
+  if (now - lastSend < 10) return; // ~100Hz 节流（降低输入到发送的等待）
   lastSend = now;
 
   const payload = {
     t: "sensors",
-    roll: round(roll),
+    // 方向盘归一化：按左右合计角度的一半换算满舵（90° → ±45° → ±1）
+    roll: round(clamp(currentSteer / ((wheelTotalAngle || 90) / 2), -1, 1)),
     pitch: round(pitch),
     yaw: round(yaw),
     accelX: round(accelX),
@@ -756,7 +1454,7 @@ function sendAll() {
 function round(v) { return Math.round(v * 1000) / 1000; }
 
 // 自动重连 + 定期发送
-setInterval(sendAll, 20);
+setInterval(sendAll, 10);
 </script>
 </body>
 </html>

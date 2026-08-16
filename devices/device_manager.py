@@ -9,7 +9,10 @@ class DeviceManager:
 
     def __init__(self, event_bus, config_path=None):
         self.event_bus = event_bus
-        self.config_path = config_path or os.path.join("config", "devices.json")
+        if config_path is None:
+            from tools.config_io import PROJECT_ROOT
+            config_path = os.path.join(PROJECT_ROOT, "config", "devices.json")
+        self.config_path = config_path
 
         self.detector = DeviceDetector()
         self.library = DeviceLibrary(
@@ -38,14 +41,6 @@ class DeviceManager:
         devices = data.get("devices", [])
         self._config = devices if isinstance(devices, list) else []
         print("[DeviceManager] Loaded config devices:", len(self._config))
-
-    def add_custom_device(self, device_config):
-        if not self._config:
-            self.load_config()
-
-        self._config.append(device_config)
-        self.save_config()
-        print("[DeviceManager] Added custom device:", device_config.get("name"))
 
     def save_config(self):
         os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
@@ -132,12 +127,13 @@ class DeviceManager:
                         "e.g. custom development boards (ESP32/Raspberry Pi)",
                     )
 
-        # 始终监听型设备（phone WebSocket 服务器）：来自 config，始终连接
+        # phone 设备由 Web 服务（WebService）单独管理：手机页面/HTTPS/配置/震动都走它。
+        # 引擎不再创建 phone WebSocket 服务器，避免与 Web 服务抢占 8765 端口，
+        # 且 Web 服务按需启动（应用手机方案时），未用时不影响蓝牙等其它连接方式。
         for entry in self._config:
             if entry.get("driver") == "phone":
-                detected = {"type": "phone"}
-                resolved.append((detected, entry, "config"))
-                print("[DeviceManager] Phone device from config:", entry.get("name"))
+                print("[DeviceManager] Phone device managed by WebService "
+                      f"(config): {entry.get('name')}")
 
         return resolved
 
@@ -235,16 +231,8 @@ class DeviceManager:
 
         return left.get("name") == right.get("name")
 
-    def connected_devices(self):
-        """返回当前已连接设备的 config 条目列表（供 GUI 显示）"""
-        return list(self._connected_entries)
-
     def online_devices(self):
-        """返回当前真正在线的设备 config 条目列表
-
-        区分于 connected_devices（已尝试连接的实例）：
-        online 只统计实例当前确实在线/打开的。
-        """
+        """返回当前真正在线的设备 config 条目列表（实例确实在线/打开）。"""
         online = []
 
         for instance, entry in zip(self._connected, self._connected_entries):
@@ -377,6 +365,8 @@ class DeviceManager:
                 connection_params,
             )
             connection.open()
+            # 把 parser 挂到连接实例上，供 GUI 读取手机上报的名称/能力
+            connection._phone_parser = parser
             return connection
 
         print("[DeviceManager] Unknown driver:", driver)
@@ -384,6 +374,9 @@ class DeviceManager:
 
     def close_all(self):
         for device in self._connected:
-            device.close()
+            try:
+                device.close()
+            except Exception as error:
+                print(f"[DeviceManager] Close failed for {device}: {error}")
         self._connected = []
         self._connected_entries = []

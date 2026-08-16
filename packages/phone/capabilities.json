@@ -161,6 +161,26 @@
             }
         },
         {
+            "id": "phone.button_back",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
+            "id": "phone.button_start",
+            "category": "button",
+            "value_type": "bool",
+            "continuous": false,
+            "return_center": false,
+            "transport": {
+                "mode": "edge"
+            }
+        },
+        {
             "id": "phone.dpad_up",
             "category": "button",
             "value_type": "bool",

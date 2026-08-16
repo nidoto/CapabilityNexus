@@ -4,11 +4,37 @@
 
 **Name:** CapabilityNexus
 
-**Current Version:** V1.0
+**Current Version:** V1.8.0
 
-**Status:** Core Framework Completed
+**Status:** Core Framework Completed + Phone Web (Wheel) Scheme Usable
 
 **Author:** Hai Lin
+
+---
+
+## Recent update (V1.8.0)
+
+> Detailed per-version records live in `DEVELOPMENT_LOG_V1.x.x.md`.
+> The bulk of this document below is the historical V1.0-era phase-by-phase log.
+
+Latest cycle highlights:
+
+- Phone Web page is now a full X360-compatible controller: gyro wheel steering,
+  two control schemes (gyro gas / touch gas+brake), fan-shaped bottom-corner
+  pedals in landscape, 20-level drag gas/brake.
+- Wheel rotation setting means **left-right total angle** (racing-wheel
+  convention, default 90° ≈ F1, ±45° per side).
+- Screen lock with element-based pass-through zones (gas/brake fans, Map,
+  Start, lock button stay usable; everything else is blocked).
+- Client device tree shows the phone's real reported name, capabilities and
+  **data-arrival latency** (measured server-side, no ping / no extra traffic),
+  and removes the phone automatically on disconnect.
+- Web service starts lazily and is the single owner of the phone link
+  (no more port-8765 conflict with the engine).
+- New file logger: `logs/client.log` captures engine events, device
+  connect/disconnect, phone frames/output samples, vibration requests, etc.
+- Racing test (Rush Rally 3): went from "cannot finish" to finishing ~16th
+  place with the phone as a wheel.
 
 ---
 

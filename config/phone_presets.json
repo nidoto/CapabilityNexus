@@ -1,0 +1,87 @@
+{
+    "interface": "web",
+    "presets": [
+        {
+            "id": "phone_web_wheel",
+            "name": "手机方向盘（Web）",
+            "description": "安卓手机浏览器作方向盘：倾斜转向、前后仰油门、拖动刹车，支持游戏震动",
+            "profile_name": "phone_web_wheel",
+            "mode": "wheel",
+            "latency_ms": 60,
+            "latency_label": "Web 手机（约 60ms）",
+            "capabilities": ["gyroscope", "accelerometer", "gas", "brake", "vibration"],
+            "device": {
+                "name": "Phone",
+                "driver": "phone",
+                "package": "phone",
+                "connection": {"type": "websocket", "port": 8765}
+            },
+            "output": "virtual_xinput",
+            "start_web": true,
+            "mappings": {
+                "phone.roll": "left_x",
+                "phone.gas": "right_trigger",
+                "phone.brake": "left_trigger",
+                "phone.button_a": "button_a",
+                "phone.button_b": "button_b",
+                "phone.button_x": "button_x",
+                "phone.button_y": "button_y",
+                "phone.button_back": "button_back",
+                "phone.button_start": "button_start",
+                "phone.dpad_up": "button_dpad_up",
+                "phone.dpad_down": "button_dpad_down",
+                "phone.dpad_left": "button_dpad_left",
+                "phone.dpad_right": "button_dpad_right"
+            },
+            "processors": {
+                "phone.roll": [
+                    {"type": "normalizer", "input_min": -1, "input_max": 1},
+                    {"type": "clamp", "minimum": -32768, "maximum": 32767}
+                ],
+                "phone.pitch": [
+                    {"type": "normalizer", "input_min": -1, "input_max": 1},
+                    {"type": "clamp", "minimum": -32768, "maximum": 32767}
+                ],
+                "phone.gas": [
+                    {"type": "normalizer", "input_min": 0, "input_max": 1, "output_min": 0, "output_max": 255},
+                    {"type": "clamp", "minimum": 0, "maximum": 255}
+                ],
+                "phone.brake": [
+                    {"type": "normalizer", "input_min": 0, "input_max": 1, "output_min": 0, "output_max": 255},
+                    {"type": "clamp", "minimum": 0, "maximum": 255}
+                ]
+            }
+        },
+        {
+            "id": "phone_pad",
+            "name": "手机手柄（Web）",
+            "description": "安卓手机浏览器作手柄：触屏十字键 + ABXY 按钮",
+            "profile_name": "phone_pad",
+            "mode": "pad",
+            "latency_ms": 40,
+            "latency_label": "Web 手机（约 40ms）",
+            "capabilities": ["buttons", "dpad", "vibration"],
+            "device": {
+                "name": "Phone",
+                "driver": "phone",
+                "package": "phone",
+                "connection": {"type": "websocket", "port": 8765}
+            },
+            "output": "virtual_xinput",
+            "start_web": true,
+            "mappings": {
+                "phone.button_a": "button_a",
+                "phone.button_b": "button_b",
+                "phone.button_x": "button_x",
+                "phone.button_y": "button_y",
+                "phone.button_back": "button_back",
+                "phone.button_start": "button_start",
+                "phone.dpad_up": "button_dpad_up",
+                "phone.dpad_down": "button_dpad_down",
+                "phone.dpad_left": "button_dpad_left",
+                "phone.dpad_right": "button_dpad_right"
+            },
+            "processors": {}
+        }
+    ]
+}

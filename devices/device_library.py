@@ -2,6 +2,8 @@ import json
 import os
 import urllib.request
 
+from devices.remote_library import RemoteJsonLibrary
+
 
 DEFAULT_LIBRARY_URL = (
     "https://raw.githubusercontent.com/nidoto/"
@@ -9,43 +11,26 @@ DEFAULT_LIBRARY_URL = (
 )
 
 
-class DeviceLibrary:
+class DeviceLibrary(RemoteJsonLibrary):
+
+    DATA_KEY = "devices"
+    LOG_PREFIX = "[DeviceLibrary]"
 
     def __init__(self, cache_path=None, library_url=None):
-        self.library_url = library_url or DEFAULT_LIBRARY_URL
-        self.cache_path = cache_path
-        self._devices = None
-
-    def _load_cached(self):
-        if not self.cache_path or not os.path.exists(self.cache_path):
-            return None
-
-        try:
-            with open(self.cache_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print("[DeviceLibrary] Cache read failed:", e)
-            return None
-
-    def _save_cache(self, data):
-        if not self.cache_path:
-            return
-
-        try:
-            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
-            with open(self.cache_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print("[DeviceLibrary] Cache write failed:", e)
+        super().__init__(
+            cache_path=cache_path,
+            library_url=library_url or DEFAULT_LIBRARY_URL,
+        )
 
     def refresh(self):
+        # 本地索引文件优先
         if os.path.exists(self.library_url):
             try:
                 with open(self.library_url, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self._devices = data.get("devices", [])
+                self._entries = data.get("devices", [])
                 self._save_cache(data)
-                print("[DeviceLibrary] Loaded local file:", len(self._devices), "devices")
+                print("[DeviceLibrary] Loaded local file:", len(self._entries), "devices")
                 return
             except Exception as e:
                 print("[DeviceLibrary] Local file read failed:", e)
@@ -57,14 +42,14 @@ class DeviceLibrary:
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-            self._devices = data.get("devices", [])
+            self._entries = data.get("devices", [])
             self._save_cache(data)
-            print("[DeviceLibrary] Loaded from GitHub:", len(self._devices), "devices")
+            print("[DeviceLibrary] Loaded from GitHub:", len(self._entries), "devices")
         except Exception as e:
             print("[DeviceLibrary] GitHub load failed, using cache:", e)
             cached = self._load_cached()
-            self._devices = cached.get("devices", []) if cached else []
-            print("[DeviceLibrary] Cache has:", len(self._devices), "devices")
+            self._entries = cached.get("devices", []) if cached else []
+            print("[DeviceLibrary] Cache has:", len(self._entries), "devices")
 
     def _match_fingerprint(self, device_fp, fp):
         if device_fp.get("type") != fp.get("type"):
@@ -93,12 +78,12 @@ class DeviceLibrary:
         return False
 
     def identify(self, detected_device):
-        if self._devices is None:
+        if self._entries is None:
             self.refresh()
 
         fingerprint = detected_device.get("fingerprint", {})
 
-        for device in self._devices:
+        for device in self._entries:
             for fp in device.get("fingerprints", []):
                 if self._match_fingerprint(fp, fingerprint):
                     return device
@@ -106,28 +91,28 @@ class DeviceLibrary:
         return None
 
     def get_device(self, device_id):
-        if self._devices is None:
+        if self._entries is None:
             self.refresh()
 
-        for device in self._devices:
+        for device in self._entries:
             if device.get("id") == device_id:
                 return device
 
         return None
 
     def list_devices(self):
-        if self._devices is None:
+        if self._entries is None:
             self.refresh()
-        return self._devices or []
+        return self._entries or []
 
     def search(self, query):
-        if self._devices is None:
+        if self._entries is None:
             self.refresh()
 
         query = (query or "").lower()
         results = []
 
-        for device in self._devices:
+        for device in self._entries:
             name = (device.get("name") or "").lower()
             device_id = (device.get("id") or "").lower()
 
@@ -157,31 +142,7 @@ class DeviceLibrary:
         return downloaded
 
     def _file_url(self, device_id, filename):
-        if os.path.exists(self.library_url):
-            return os.path.join(
-                os.path.dirname(self.library_url),
-                "devices",
-                device_id,
-                filename,
-            )
-
-        base = self.library_url.rsplit("/", 1)[0]
-        return f"{base}/devices/{device_id}/{filename}"
-
-    def _fetch_file(self, url):
-        if url.startswith("http"):
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": "CapabilityNexus"},
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-
-        if os.path.exists(url):
-            with open(url, "r", encoding="utf-8") as f:
-                return json.load(f)
-
-        raise FileNotFoundError(url)
+        return super()._file_url(device_id, filename, subdir="devices")
 
     def download_device(self, device_id):
         device = self.get_device(device_id)

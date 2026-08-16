@@ -15,7 +15,7 @@ class EventBus:
                 self.subscribers.append(registration)
 
         if self.debug:
-                print("[EventBus Subscribe]", event_type, callback)
+            print("[EventBus Subscribe]", event_type, callback)
 
     def unsubscribe(self, event_type, callback):
         with self._lock:

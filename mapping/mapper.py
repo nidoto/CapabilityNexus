@@ -10,6 +10,7 @@ class MappingEngine:
         self.event_bus = event_bus
 
         # source -> [ {target, gain, return_to_center}, ... ]
+        # return_to_center 为配置元数据，当前路由逻辑未使用（留待回中策略）
         self.mapping = {}
 
         # target -> {source: value} 用于多对一合并
@@ -93,15 +94,10 @@ class MappingEngine:
                 target = config["target"]
                 value = channel.value * config["gain"]
                 self._target_sources[target][channel.id] = value
-                events.append((target, value, config["gain"]))
+                events.append((target, value))
 
-        for target, value, gain in events:
-            self._publish(channel.id, target, value, gain)
+        for target, value in events:
+            self._publish(target, value)
 
-    def _publish(self, source, target, value, gain):
-        event = OutputEvent(
-            target,
-            value,
-        )
-
-        self.event_bus.publish(event)
+    def _publish(self, target, value):
+        self.event_bus.publish(OutputEvent(target, value))

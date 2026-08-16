@@ -21,3 +21,9 @@ config/active_profile.json
 
 # 本地自签 HTTPS 证书（运行时生成，不随仓库上传）
 config/certs/
+
+# 运行时日志（不随仓库上传）
+logs/
+
+# 手机按设备保存的个人配置（不随仓库上传）
+config/phone_profiles/

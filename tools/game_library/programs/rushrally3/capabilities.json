@@ -1,0 +1,24 @@
+{
+    "id": "rushrally3",
+    "name": "Rush Rally 3",
+    "executables": [
+        "RushRally3.exe",
+        "rushrally3.exe"
+    ],
+    "supported_modes": [
+        "x360_pad"
+    ],
+    "latency_requirement": "high",
+    "latency_note": "赛车竞速对输入延时敏感：转向/刹车需低延迟才能稳定操控。",
+    "reverse_capabilities": {
+        "vibration": {
+            "supported": true,
+            "detail": "支持手柄震动（碰撞/路面反馈）"
+        },
+        "gyro": {
+            "supported": false,
+            "detail": "不支持方向盘/陀螺仪，需以手柄方式模拟转向"
+        }
+    },
+    "notes": "该游戏仅支持手柄输入，不支持方向盘。使用手机方案时应模拟为 X360 兼容手柄（方向盘→左摇杆转向）。"
+}

@@ -23,7 +23,7 @@ from devices.device_manager import DeviceManager
 class CapabilityNexusApp:
 
     def __init__(self):
-        self.project_root = os.path.dirname(os.path.abspath(__file__))
+        self.project_root = self._project_root()
         self.event_bus = EventBus()
         self.registry = CapabilityRegistry()
 
@@ -39,19 +39,36 @@ class CapabilityNexusApp:
 
         print("CapabilityNexus Ready")
 
+    @staticmethod
+    def _project_root():
+        import sys as _sys
+
+        if getattr(_sys, "frozen", False):
+            return getattr(_sys, "_MEIPASS", None) or os.path.dirname(_sys.executable)
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def _load_active_profile(self):
+        """读取一次当前激活的游戏配置并缓存，供处理器/映射/输出复用。"""
+        from tools.config_io import load_profile
+
+        self._profile_data = load_profile()
+
     def _build_pipeline(self):
-        # 能力包
+        # 能力包（只读，frozen 下从内嵌 _MEIPASS/packages 加载）
         self.package_manager = PackageManager(self.registry)
         self.package_manager.load(os.path.join(self.project_root, "packages"))
 
         # 数据适配
         self.adapter = StreamAdapter(self.registry)
 
-        # 处理器（全局 + 游戏专属覆盖）
+        # 处理器（全局 + 游戏专属覆盖）—— 用户配置与 GUI 同源（exe 同级 config）
+        from tools.config_io import PROJECT_ROOT as _cfg_root
+
         self.processor_manager = ProcessorManager()
         self.processor_manager.load(
-            os.path.join(self.project_root, "config", "processors.json")
+            os.path.join(_cfg_root, "config", "processors.json")
         )
+        self._load_active_profile()
         self._load_game_processors()
 
         # UMI 解析器（控制台测试用）
@@ -90,7 +107,7 @@ class CapabilityNexusApp:
         # Transform Layer（用户逻辑表）
         self.transform_layer = TransformLayer(self.event_bus)
 
-        transforms_path = os.path.join(self.project_root, "config", "transforms.json")
+        transforms_path = os.path.join(_cfg_root, "config", "transforms.json")
         if os.path.exists(transforms_path):
             self.transform_layer.load(transforms_path)
 
@@ -107,40 +124,33 @@ class CapabilityNexusApp:
 
         # Mapping
         self.mapping_engine = MappingEngine(self.event_bus)
-        self.mapping_engine.load_profile(self._active_profile_path())
-
-    def _active_profile_path(self):
-        from tools.config_io import active_profile_path
-
-        return active_profile_path()
+        self.mapping_engine.load_mappings(self._profile_data.get("mappings", {}))
 
     def _load_game_processors(self):
         """加载当前激活游戏配置中的处理器覆盖。"""
-        import json
-
-        path = self._active_profile_path()
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (OSError, json.JSONDecodeError) as error:
-            print("[App] Failed to read game profile processors:", error)
-            return
-
-        processors = data.get("processors")
+        processors = self._profile_data.get("processors")
         if processors:
             self.processor_manager.load_dict(processors)
 
     def reload_processors(self):
         """运行时重载处理器（全局 + 当前游戏配置）。"""
+        from tools.config_io import PROJECT_ROOT as _cfg_root
+
         self.processor_manager.processors.clear()
         self.processor_manager.load(
-            os.path.join(self.project_root, "config", "processors.json")
+            os.path.join(_cfg_root, "config", "processors.json")
         )
+        self._load_active_profile()
         self._load_game_processors()
 
     def _build_outputs(self):
-        # 输出设备（用户启用）
-        self.output_manager = OutputDeviceManager(event_bus=self.event_bus)
+        # 输出设备（用户启用）——用绝对路径，兼容打包 exe（相对路径会解析失败）
+        from tools.config_io import PROJECT_ROOT as _cfg_root
+
+        self.output_manager = OutputDeviceManager(
+            event_bus=self.event_bus,
+            config_path=os.path.join(_cfg_root, "config", "outputs.json"),
+        )
         self.output_manager.load()
         self.output_manager.build_all()
 
@@ -151,16 +161,10 @@ class CapabilityNexusApp:
         )
 
         # 需求处理（游戏请求 -> 映射或提示）
-        import json as _json
-
-        profile_path = self._active_profile_path()
-        with open(profile_path, "r", encoding="utf-8") as _f:
-            _profile_data = _json.load(_f)
-
         self.request_handler = RequestHandler(
             self.event_bus,
             router=self.output_router,
-            mappings=_profile_data.get("mappings", {}),
+            mappings=self._profile_data.get("mappings", {}),
         )
 
         # OutputEvent -> 路由
@@ -170,10 +174,13 @@ class CapabilityNexusApp:
         self.event_bus.subscribe(OutputEvent, output_receive)
 
     def _build_devices(self):
-        # 设备识别 + 连接
+        # 设备识别 + 连接。用户设备配置与 GUI 同源（exe 同级 config/devices.json），
+        # frozen 下不能读内嵌 _MEIPASS（那是发布默认，不含用户/方案添加的设备）。
+        from tools.config_io import CONFIG_PATH
+
         self.device_manager = DeviceManager(
             self.event_bus,
-            config_path=os.path.join(self.project_root, "config", "devices.json"),
+            config_path=CONFIG_PATH,
         )
 
         resolved = self.device_manager.discover()

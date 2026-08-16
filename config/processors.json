@@ -1,83 +1,116 @@
 {
-    "processors":
-    {
-
-        "motion.pitch":
-        [
-            {
-                "type":"normalizer",
-                "input_min":-180,
-                "input_max":180
-            },
-
-            {
-                "type":"deadzone",
-                "value":5
-            },
-
-            {
-                "type":"sensitivity",
-                "value":2
-            },
-
-            {
-                "type":"clamp",
-                "minimum":-32768,
-                "maximum":32767
-            }
-        ],
-
-
-        "motion.roll":
-        [
-            {
-                "type":"normalizer",
-                "input_min":-180,
-                "input_max":180
-            },
-
-            {
-                "type":"deadzone",
-                "value":5
-            },
-
-            {
-                "type":"sensitivity",
-                "value":2
-            },
-
-            {
-                "type":"clamp",
-                "minimum":-32768,
-                "maximum":32767
-            }
-        ],
-
-
-        "motion.yaw":
-        [
-            {
-                "type":"normalizer",
-                "input_min":-180,
-                "input_max":180
-            },
-
-            {
-                "type":"deadzone",
-                "value":3
-            },
-
-            {
-                "type":"sensitivity",
-                "value":2
-            },
-
-            {
-                "type":"clamp",
-                "minimum":-32768,
-                "maximum":32767
-            }
-        ]
-
-    }
+  "processors": {
+    "phone.roll": [
+      {
+        "type": "normalizer",
+        "input_min": -1,
+        "input_max": 1
+      },
+      {
+        "type": "clamp",
+        "minimum": -32768,
+        "maximum": 32767
+      }
+    ],
+    "phone.pitch": [
+      {
+        "type": "normalizer",
+        "input_min": -1,
+        "input_max": 1
+      },
+      {
+        "type": "clamp",
+        "minimum": -32768,
+        "maximum": 32767
+      }
+    ],
+    "phone.gas": [
+      {
+        "type": "normalizer",
+        "input_min": 0,
+        "input_max": 1,
+        "output_min": 0,
+        "output_max": 255
+      },
+      {
+        "type": "clamp",
+        "minimum": 0,
+        "maximum": 255
+      }
+    ],
+    "phone.brake": [
+      {
+        "type": "normalizer",
+        "input_min": 0,
+        "input_max": 1,
+        "output_min": 0,
+        "output_max": 255
+      },
+      {
+        "type": "clamp",
+        "minimum": 0,
+        "maximum": 255
+      }
+    ],
+    "motion.pitch": [
+      {
+        "type": "normalizer",
+        "input_min": -180,
+        "input_max": 180
+      },
+      {
+        "type": "deadzone",
+        "value": 5
+      },
+      {
+        "type": "sensitivity",
+        "value": 2
+      },
+      {
+        "type": "clamp",
+        "minimum": -32768,
+        "maximum": 32767
+      }
+    ],
+    "motion.roll": [
+      {
+        "type": "normalizer",
+        "input_min": -180,
+        "input_max": 180
+      },
+      {
+        "type": "deadzone",
+        "value": 5
+      },
+      {
+        "type": "sensitivity",
+        "value": 2
+      },
+      {
+        "type": "clamp",
+        "minimum": -32768,
+        "maximum": 32767
+      }
+    ],
+    "motion.yaw": [
+      {
+        "type": "normalizer",
+        "input_min": -180,
+        "input_max": 180
+      },
+      {
+        "type": "deadzone",
+        "value": 3
+      },
+      {
+        "type": "sensitivity",
+        "value": 2
+      },
+      {
+        "type": "clamp",
+        "minimum": -32768,
+        "maximum": 32767
+      }
+    ]
+  }
 }

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
@@ -12,14 +13,29 @@ from tools.i18n import I18n
 
 class CapabilityNexusGUI:
 
+    # 手机上报的能力 tag → 中文标签（设备树展示用）
+    PHONE_CAP_LABELS = {
+        "gyroscope": "陀螺仪",
+        "accelerometer": "加速度计",
+        "buttons": "按钮",
+        "dpad": "方向键",
+        "gas": "油门",
+        "brake": "刹车",
+        "vibration": "震动",
+        "gps": "GPS",
+        "screen": "屏幕",
+        "speaker": "扬声器",
+        "mic": "麦克风",
+    }
+
     def __init__(self, root):
         self.root = root
-        self.i18n = I18n("zh")
+        self.i18n = I18n(config_io.load_client_language("zh"))
         self.app = None
 
         self.root.title(self.t("app_title"))
-        self.root.geometry("1600x1000")
-        self.root.minsize(1280, 820)
+        self.root.geometry("1760x1060")
+        self.root.minsize(1400, 900)
         self._configure_style()
 
         self._build_menubar()
@@ -28,6 +44,9 @@ class CapabilityNexusGUI:
         self.refresh_devices()
         self._start_monitor_loop()
         self.root.after(300, self._auto_start_engine)
+
+        self._log_to_file(f"CapabilityNexus 客户端启动（PID {os.getpid()}，日志文件 "
+                          f"{os.path.join(config_io.PROJECT_ROOT, 'logs', 'client.log')}）")
 
     def _configure_style(self):
         style = ttk.Style(self.root)
@@ -109,14 +128,20 @@ class CapabilityNexusGUI:
         self._monitor_job = self.root.after(200, self._monitor_tick)
 
     def _monitor_tick(self):
+        self._check_phone_state_change()
+        self._check_device_changes()
+        self._check_output_snapshot()
         self._refresh_live_values()
-        self._render_request_tree()
         self._render_request_monitor()
 
         # 服务面板低频刷新（驱动 sc query 较重，约每 2 秒）
         self._services_tick_counter = getattr(self, "_services_tick_counter", 0) + 1
         if self._services_tick_counter % 10 == 0:
             self._services_tick_refresh()
+
+        # 自动感知正在运行的游戏（约每 2 秒）
+        if self._services_tick_counter % 10 == 1:
+            self._auto_detect_game()
 
         self._monitor_job = self.root.after(200, self._monitor_tick)
 
@@ -151,13 +176,15 @@ class CapabilityNexusGUI:
         menubar = tk.Menu(self.root)
 
         settings_menu = tk.Menu(menubar, tearoff=0)
-        settings_menu.add_command(label=self.t("menu_preferences"), command=self.show_preferences)
+        settings_menu.add_command(label=self.t("menu_start_engine"), command=self.start_engine)
+        settings_menu.add_command(label=self.t("menu_stop_engine"), command=self.stop_engine)
+        settings_menu.add_separator()
         settings_menu.add_command(label=self.t("menu_services"), command=self.show_services)
         settings_menu.add_command(label=self.t("menu_drivers"), command=self.show_drivers)
         settings_menu.add_command(label=self.t("menu_hidhide"), command=self.show_hidhide)
         settings_menu.add_separator()
-        settings_menu.add_command(label=self.t("menu_start_engine"), command=self.start_engine)
-        settings_menu.add_command(label=self.t("menu_stop_engine"), command=self.stop_engine)
+        settings_menu.add_command(label=self.t("menu_preferences"), command=self.show_preferences)
+        settings_menu.add_command(label=self.t("menu_open_log"), command=self.open_log_file)
         settings_menu.add_separator()
         settings_menu.add_command(label=self.t("menu_exit"), command=self.root.quit)
         menubar.add_cascade(label=self.t("menu_system"), menu=settings_menu)
@@ -165,6 +192,13 @@ class CapabilityNexusGUI:
         devices_menu = tk.Menu(menubar, tearoff=0)
         devices_menu.add_command(label=self.t("menu_add_device"), command=self.add_device_dialog)
         devices_menu.add_command(label=self.t("menu_history_devices"), command=self.show_history_devices)
+        devices_menu.add_separator()
+
+        # 手机 Web 预设子菜单（一键应用方向盘/手柄方案）
+        phone_preset_menu = tk.Menu(devices_menu, tearoff=0)
+        self._populate_phone_presets(phone_preset_menu)
+        devices_menu.add_cascade(label=self.t("menu_phone_presets"), menu=phone_preset_menu)
+
         devices_menu.add_separator()
         devices_menu.add_command(label=self.t("menu_refresh"), command=self.refresh_devices)
         menubar.add_cascade(label=self.t("menu_devices"), menu=devices_menu)
@@ -183,22 +217,76 @@ class CapabilityNexusGUI:
         output_menu.add_command(label=self.t("menu_output_devices"), command=self.show_output_devices)
         menubar.add_cascade(label=self.t("menu_output"), menu=output_menu)
 
-        help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label=self.t("menu_about"), command=self.show_about)
-        help_menu.add_command(label=self.t("menu_help_item"), command=self.show_help)
-        menubar.add_cascade(label=self.t("menu_help"), menu=help_menu)
-
         lang_menu = tk.Menu(menubar, tearoff=0)
         lang_menu.add_command(label="中文", command=lambda: self._switch_lang("zh"))
         lang_menu.add_command(label="English", command=lambda: self._switch_lang("en"))
         menubar.add_cascade(label=self.t("menu_language"), menu=lang_menu)
 
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label=self.t("menu_about"), command=self.show_about)
+        help_menu.add_command(label=self.t("menu_help_item"), command=self.show_help)
+        menubar.add_cascade(label=self.t("menu_help"), menu=help_menu)
+
         self.root.config(menu=menubar)
 
     def _switch_lang(self, lang):
         self.i18n.set_language(lang)
+        config_io.save_client_language(lang)
         self.root.title(self.t("app_title"))
         self._rebuild()
+
+    def _populate_phone_presets(self, menu):
+        """填充手机 Web 预设子菜单（方向盘 / 手柄等），直接应用不弹窗。"""
+        from tools.presets import load_presets
+
+        presets = load_presets()
+        if not presets:
+            menu.add_command(label=self.t("menu_no_presets"), command=lambda: None)
+            return
+        for preset in presets:
+            label = preset.get("name", preset.get("id", "?"))
+            menu.add_command(
+                label=label,
+                command=lambda pid=preset.get("id"): self._apply_phone_preset(pid),
+            )
+
+    def _apply_phone_preset(self, preset_id, game=None):
+        """应用手机 Web 方案到指定游戏（输入设备+映射+处理器+X360 兼容输出），自动启动 Web 服务。"""
+        from tools.presets import apply_preset
+
+        ok, message, actions, unmet = apply_preset(preset_id, game=game)
+        if not ok:
+            self.log(f"方案应用失败: {message}")
+            return
+
+        # 一键动作：自动启动 Web 手机服务（用户无需手动开启）
+        for action in actions:
+            if action == "start_web":
+                self._ensure_web_running()
+
+        self._reload_profile_config()
+        self.refresh_mappings()
+        self.refresh_devices()
+        self.log(message)
+
+        # 延时风险/能力缺口：以颜色在设备树与游戏列表中体现，不再弹窗
+        # 延时风险：设备树节点已按连接类型着色；游戏列表按延时要求着色
+
+    def _ensure_web_running(self):
+        """确保 Web 手机服务已启动；未启动则自动启动。"""
+        try:
+            if not hasattr(self, "_web_service") or self._web_service is None:
+                return
+            if not self._web_service.is_running():
+                ok, err = self._web_service.start()
+                if ok:
+                    self.log("Web 手机服务已自动启动")
+                else:
+                    self.log(f"Web 服务启动失败: {err}")
+                if hasattr(self, "_refresh_web"):
+                    self._refresh_web()
+        except Exception as error:
+            self.log(f"自动启动 Web 服务失败: {error}")
 
     #
     # Layout
@@ -217,7 +305,7 @@ class CapabilityNexusGUI:
         actions = ttk.Frame(header)
         actions.pack(side=tk.RIGHT, fill=tk.Y)
         self.engine_badge = tk.Label(actions, text=self.t("ui_engine_offline"), bg="#3f1d2e", fg="#fda4af", font=("Segoe UI", 9, "bold"), padx=8, pady=5)
-        self.engine_badge.pack(side=tk.LEFT, padx=(0, 10), pady=17)
+        self.engine_badge.pack(side=tk.LEFT, padx=(0, 10), pady=15)
         ttk.Button(actions, text=self.t("ui_start_engine"), style="Accent.TButton", command=self.start_engine).pack(side=tk.LEFT, padx=3, pady=15)
         ttk.Button(actions, text=self.t("ui_stop_engine"), command=self.stop_engine).pack(side=tk.LEFT, padx=3, pady=15)
         ttk.Button(actions, text=self.t("ui_refresh"), command=self.refresh_devices).pack(side=tk.LEFT, padx=(3, 0), pady=15)
@@ -289,18 +377,6 @@ class CapabilityNexusGUI:
         mon.rowconfigure(0, weight=1)
         self.output_monitor.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
         scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=4)
-
-    def _append_monitor(self, widget, text):
-        widget.config(state=tk.NORMAL)
-        widget.insert(tk.END, text + "\n")
-        widget.see(tk.END)
-
-        # 限制行数
-        lines = int(widget.index("end-1c").split(".")[0])
-        if lines > 50:
-            widget.delete("1.0", f"{lines - 40}.0")
-
-        widget.config(state=tk.DISABLED)
 
     def _on_tree_right_click(self, event):
         item = self.device_tree.identify_row(event.y)
@@ -388,6 +464,14 @@ class CapabilityNexusGUI:
         if self.app is not None and hasattr(self.app, "device_manager"):
             for entry in self.app.device_manager.online_devices():
                 online_names.add(entry.get("name"))
+
+        # 手机由 Web 服务托管：Web 服务连上也算在线
+        try:
+            web = getattr(self, "_web_service", None)
+            if web is not None and web.is_phone_connected:
+                online_names.add(web.device_name or "Phone")
+        except Exception:
+            pass
 
         for device in devices:
             name = device.get("name", "?")
@@ -494,6 +578,18 @@ class CapabilityNexusGUI:
         )
         self.prog_status.pack(fill=tk.X, padx=4, pady=(0, 4))
 
+        # 游戏能力 / 延时要求显示（识别到进程后填充）
+        self.prog_caps = tk.Label(
+            prog,
+            text="",
+            font=("Segoe UI", 9),
+            justify=tk.LEFT,
+            anchor="w",
+            foreground="#94a3b8",
+            wraplength=260,
+        )
+        self.prog_caps.pack(fill=tk.X, padx=4, pady=(0, 4))
+
         self._refresh_process_list()
 
         self._build_request_monitor(box)
@@ -544,7 +640,7 @@ class CapabilityNexusGUI:
     def _current_proc_filter(self):
         try:
             return (self.proc_combo.get() or "").strip().lower()
-        except Exception:
+        except tk.TclError:
             return ""
 
     def _on_proc_filter(self, event):
@@ -625,11 +721,128 @@ class CapabilityNexusGUI:
 
         return None
 
+    def _match_game_for_exe(self, exe_name):
+        """按进程 exe 名匹配游戏能力配置，返回游戏 id 或 None。"""
+        if not exe_name:
+            return None
+        exe_lower = exe_name.lower().replace(".exe", "")
+
+        from tools.game_capabilities import load_game_capabilities
+        from tools.game_capabilities import list_games
+
+        for gid in list_games():
+            caps = load_game_capabilities(gid)
+            if not caps:
+                continue
+            execs = [e.lower().replace(".exe", "") for e in caps.get("executables", [])]
+            if exe_lower in execs or any(e in exe_lower or exe_lower in e for e in execs):
+                return gid
+        return None
+
+    def _fill_prog_caps_for_exe(self, exe_name):
+        """按进程 exe 名匹配游戏能力配置，在进程区显示能力/延时要求（含颜色）。"""
+        from tools.latency import color_for
+        from tools.latency import label_for
+
+        try:
+            if not hasattr(self, "prog_caps"):
+                return
+            self.prog_caps.config(text="", fg="#94a3b8")
+            if not exe_name:
+                return
+
+            exe_lower = exe_name.lower().replace(".exe", "")
+
+            gid = self._match_game_for_exe(exe_name)
+            if not gid:
+                return
+            from tools.game_capabilities import load_game_capabilities
+            matched = load_game_capabilities(gid)
+            if not matched:
+                return
+
+            name = matched.get("name", "")
+            modes = matched.get("supported_modes", [])
+            req = matched.get("latency_requirement", "")
+            rev = matched.get("reverse_capabilities", {})
+            notes = matched.get("notes", "")
+
+            lines = [f"游戏: {name}"]
+            if modes:
+                lines.append(f"支持模式: {', '.join(modes)}")
+            if req:
+                req_label = label_for(req)
+                req_color = color_for(req)
+                lines.append(f"延时要求: {req} ({req_label})")
+            rev_need = [k for k, v in rev.items() if isinstance(v, dict) and v.get("supported")]
+            if rev_need:
+                lines.append(f"反向能力: {', '.join(rev_need)}")
+            if notes:
+                lines.append(notes)
+
+            text = "\n".join(lines)
+            # 延时要求着色：红=高要求、黄=中、绿=低
+            fg = color_for(req) if req in ("low", "medium", "high") else "#94a3b8"
+            self.prog_caps.config(text=text, fg=fg)
+        except Exception as error:
+            print("[GUI] prog_caps fill failed:", error)
+
+    def _auto_detect_game(self):
+        """自动感知正在运行的游戏（无需用户手动选进程）。
+
+        枚举进程 → 匹配游戏能力库 → 更新进程下拉框 + 能力/延时显示。
+        只在检测到变化时提示一次，避免刷屏。
+        """
+        try:
+            from devices.process_list import list_processes
+
+            entries = list_processes()
+            detected = None
+            for entry in entries:
+                exe_name = entry.get("name", "")
+                if not exe_name:
+                    continue
+                gid = self._match_game_for_exe(exe_name)
+                if gid:
+                    detected = (gid, entry)
+                    break
+
+            last = getattr(self, "_auto_detected", None)
+            if detected is None:
+                if last is not None:
+                    self._auto_detected = None
+                    self.prog_caps.config(text="", fg="#94a3b8")
+                    self.log("未检测到已知游戏进程")
+                return
+
+            gid, entry = detected
+            if last == gid:
+                return  # 已提示过，不重复
+
+            self._auto_detected = gid
+            name = entry.get("name", "")
+            # 填充进程下拉框和状态
+            try:
+                self.proc_combo.set(f"{name} (PID {entry.get('pid')})")
+            except tk.TclError:
+                pass
+            self.prog_status.config(
+                text=f"自动检测到游戏: {name}",
+                foreground="#4caf50",
+            )
+            self._fill_prog_caps_for_exe(name)
+            self.log(f"自动检测到游戏: {name}（{gid}）")
+        except Exception as error:
+            print("[GUI] auto_detect_game failed:", error)
+
     def _identify_process(self, entry):
         """识别进程：匹配反向需求库并导入"""
         from devices.process_list import process_exe_name
         exe_name = process_exe_name(entry)
         self._selected_process_label = f"{entry.get('name')} (PID {entry.get('pid')})"
+
+        # 按进程 exe 匹配游戏能力配置，填充能力/延时显示
+        self._fill_prog_caps_for_exe(exe_name)
 
         self.log(f"{self.t('log_selected_proc')}: {entry.get('name')} (PID {entry.get('pid')})")
         self.prog_status.config(text="正在检索程序需求库...", foreground="#2563eb")
@@ -775,88 +988,6 @@ class CapabilityNexusGUI:
         self.request_monitor.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(4, 0), pady=4)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 4), pady=4)
 
-    def _on_request_double_click(self, event):
-        self.map_selected_request()
-
-    def _clear_requests(self):
-        if self.app is None or not hasattr(self.app, "status_monitor"):
-            return
-
-        self.app.status_monitor.clear_requests()
-
-        self._render_request_tree()
-        self._render_request_monitor()
-
-    def map_selected_request(self):
-        selection = self.request_tree.selection()
-
-        if not selection:
-            self.log(self.t("log_no_request"))
-            return
-
-        item = self.request_tree.item(selection[0])
-        text = item.get("text", "")
-        target = text.split(" -> ")[-1].strip()
-
-        if not target or "=" in target:
-            self.log(self.t("log_no_request"))
-            return
-
-        self._map_request_to_real(target)
-
-    def _map_request_to_real(self, target):
-        profile = config_io.load_profile()
-        mappings = profile.get("mappings", {})
-
-        existing = mappings.get(target)
-        if existing:
-            self.log(f"{target} already mapped: {config_io.mapping_desc(existing)}")
-            return
-
-        mappings[target] = [{
-            "target": target,
-            "gain": 1.0,
-            "return_to_center": False,
-        }]
-        config_io.save_profile(profile)
-
-        self.refresh_mappings()
-        self.log(f"{self.t('log_mapped_request')}: {target} -> {target}")
-        self._render_request_tree()
-
-        if self.app is not None:
-            self.app.request_handler.set_mappings(mappings)
-
-    def _render_request_tree(self):
-        if not hasattr(self, "request_tree"):
-            return
-
-        self.request_tree.delete(*self.request_tree.get_children())
-
-        if self.app is None or not hasattr(self.app, "status_monitor"):
-            return
-
-        requests = self.app.status_monitor.all_requests()
-        if not requests:
-            return
-
-        profile = config_io.load_profile()
-        mappings = profile.get("mappings", {})
-
-        for target, (source, value) in requests.items():
-            mapped = target in mappings
-
-            self.request_tree.insert(
-                "",
-                tk.END,
-                text=f"{source} -> {target}",
-                values=(f"{value:.0f}", "mapped" if mapped else "unmapped"),
-                tags=("request", "mapped") if mapped else ("request", "unmapped"),
-            )
-
-        self.request_tree.tag_configure("mapped", foreground="#2e7d32")
-        self.request_tree.tag_configure("unmapped", foreground="#c0392b")
-
     def _render_request_monitor(self):
         if not hasattr(self, "request_monitor"):
             return
@@ -889,7 +1020,7 @@ class CapabilityNexusGUI:
         from output.devices import OUTPUT_DEVICES
 
         type_map = {
-            "xinput": next((d for d in OUTPUT_DEVICES if d.id == "virtual_x360"), None),
+            "xinput": next((d for d in OUTPUT_DEVICES if d.id == "virtual_xinput"), None),
             "ds4": next((d for d in OUTPUT_DEVICES if d.id == "virtual_ds4"), None),
             "keyboard": next((d for d in OUTPUT_DEVICES if d.id == "virtual_keyboard"), None),
             "mouse": next((d for d in OUTPUT_DEVICES if d.id == "virtual_mouse"), None),
@@ -1061,7 +1192,7 @@ class CapabilityNexusGUI:
 
     def _build_log_panel(self, parent):
         bottom = ttk.Frame(parent)
-        bottom.pack(fill=tk.X, padx=12, pady=(0, 10))
+        bottom.pack(fill=tk.X, padx=12, pady=(0, 8))
 
         bottom.columnconfigure(0, weight=3)
         bottom.columnconfigure(1, weight=2)
@@ -1070,7 +1201,7 @@ class CapabilityNexusGUI:
         logbox = ttk.LabelFrame(bottom, text=self.t("panel_log"))
         logbox.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
 
-        self.log_text = tk.Text(logbox, height=5, state=tk.DISABLED, bg="#0f172a", fg="#94a3b8", relief=tk.FLAT, padx=8, pady=5, font=("Consolas", 9))
+        self.log_text = tk.Text(logbox, height=8, state=tk.DISABLED, bg="#0f172a", fg="#94a3b8", relief=tk.FLAT, padx=8, pady=5, font=("Consolas", 9))
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
         # 右侧：服务功能区（驱动 / Web 服务统一管理）
@@ -1101,8 +1232,16 @@ class CapabilityNexusGUI:
 
         # Web 服务（手机）—— 实例跨重建复用，保持运行状态
         if not hasattr(self, "_web_service") or self._web_service is None:
-            self._web_service = services.WebService(port=8765, callback=self._phone_data_callback, use_https=True)
-        web_frame, web_status, web_toggle = make_service_row(rows, self.t("svc_web"), 0)
+            self._web_service = services.WebService(
+                port=8765,
+                callback=self._phone_data_callback,
+                use_https=True,
+                on_client_change=self._on_phone_clients_changed,
+            )
+            # 震动转发订阅在引擎启动后建立（_ensure_phone_vibration_sub），
+            # 因为这里 self.app 可能尚未创建
+            self._ensure_phone_vibration_sub()
+        _web_frame, web_status, web_toggle = make_service_row(rows, self.t("svc_web"), 0)
         self._web_status_label = web_status
         self._web_toggle_btn = web_toggle
 
@@ -1130,13 +1269,23 @@ class CapabilityNexusGUI:
                 else:
                     lines.append("  ".join(info["page_urls"]))
 
-                # 已连接的手机设备 + 能力
-                dev_name = self._web_service.device_name
-                dev_caps = self._web_service.device_capabilities
-                if dev_name:
-                    lines.append(f"{self.t('svc_device')}: {dev_name}")
-                if dev_caps:
-                    lines.append(f"{self.t('svc_capabilities')}: {', '.join(dev_caps)}")
+                # 手机连接状态 + 能力 + 平均延时（需最近有真实数据才算已连接）
+                phone_info = self._phone_connection_info()
+                connected = phone_info["connected"]
+                if connected:
+                    dev_name = phone_info["name"] or "Phone"
+                    status_txt = self.t("tree_connected")
+                    di = phone_info["data_interval_ms"]
+                    if di is not None:
+                        status_txt += f"  {self.t('tree_latency')} {di}ms"
+                    lines.append(f"{self.t('svc_device')}: {dev_name}  {status_txt}")
+                    dev_caps = phone_info["capabilities"]
+                    if dev_caps:
+                        lines.append(
+                            f"{self.t('svc_capabilities')}: {', '.join(dev_caps)}"
+                        )
+                else:
+                    lines.append(f"{self.t('svc_device')}: {self.t('tree_disconnected')}")
             else:
                 # 未运行时也提示可用的本机 IP
                 best = info.get("best_ip") or ""
@@ -1166,12 +1315,12 @@ class CapabilityNexusGUI:
         ttk.Separator(rows, orient=tk.HORIZONTAL).grid(row=2, column=0, sticky="ew", pady=6)
 
         # ViGEmBus 驱动
-        vg_frame, vg_status, vg_toggle = make_service_row(rows, "ViGEmBus", 3)
+        _vg_frame, vg_status, vg_toggle = make_service_row(rows, "ViGEmBus", 3)
         self._vg_status_label = vg_status
         self._vg_toggle_btn = vg_toggle
 
         # HidHide 驱动
-        hh_frame, hh_status, hh_toggle = make_service_row(rows, "HidHide", 4)
+        _hh_frame, hh_status, hh_toggle = make_service_row(rows, "HidHide", 4)
         self._hh_status_label = hh_status
         self._hh_toggle_btn = hh_toggle
 
@@ -1223,6 +1372,33 @@ class CapabilityNexusGUI:
         refresh_web()
         refresh_drivers()
 
+    def _ensure_phone_vibration_sub(self):
+        """建立游戏震动 → 手机转发订阅（需引擎已启动，幂等）。"""
+        try:
+            if self.app is None:
+                return
+            if getattr(self._web_service, "_request_sub", None) is not None:
+                return
+            from core.system_event import DeviceRequestEvent
+
+            def _on_phone_request(request):
+                self._web_service.forward_request_event(request)
+                target = getattr(request, "target", "")
+                value = getattr(request, "value", 0.0)
+                if target in ("xbox.motor_left", "xbox.motor_right") and value > 0:
+                    self.log(f"游戏震动请求: {target} = {int(value)} → 已转发手机")
+                    # 反向输出说明游戏正在运行：自动感知并选中该进程
+                    #（用户可能未手动选择进程，但请求本身就是"发起者"证据）
+                    if not getattr(self, "_auto_detected", None):
+                        self._auto_detect_game()
+
+            self._web_service._request_sub = self.app.event_bus.subscribe(
+                DeviceRequestEvent,
+                _on_phone_request,
+            )
+        except Exception as error:
+            print("[GUI] Phone vibration forwarding setup failed:", error)
+
     def _phone_data_callback(self, message):
         """Web 服务收到的手机数据：解析并发布到引擎的 event_bus。
 
@@ -1244,6 +1420,173 @@ class CapabilityNexusGUI:
         except Exception as error:
             print("[PhoneData] parse failed:", error)
 
+        # 手机上报 hello（名称/能力）时刷新设备树并记录日志
+        try:
+            import json as _json
+
+            text = message
+            if isinstance(text, bytes):
+                text = text.decode("utf-8", errors="replace")
+            data = _json.loads(text)
+            frame_type = data.get("t", data.get("type", "sensors"))
+
+            if frame_type == "hello":
+                caps_text = ", ".join(data.get("capabilities") or [])
+                self._log_to_file(
+                    f"[手机上报] 名称={data.get('name') or 'Phone'} 能力={caps_text}"
+                )
+                self._schedule_refresh_devices()
+            elif frame_type == "config":
+                self._log_to_file("[手机配置] 手机保存了本机配置")
+            elif frame_type in ("sensors", "sensor"):
+                # 帧采样写入日志文件（约每秒 1 条），记录真实数据传输情况，便于事后排查
+                self._frame_count = getattr(self, "_frame_count", 0) + 1
+                if self._frame_count % 100 == 0:
+                    self._log_to_file(
+                        f"[手机帧] roll={data.get('roll')} pitch={data.get('pitch')} "
+                        f"gas={data.get('gas')} brake={data.get('brake')}"
+                    )
+        except Exception:
+            pass
+
+    def _on_phone_clients_changed(self, count):
+        """手机客户端连接/断开回调（在 Web 服务线程触发）→ 主线程刷新设备树。"""
+        self._schedule_refresh_devices()
+
+    def _schedule_refresh_devices(self):
+        """在主线程安全地刷新设备树（可由服务线程调用）。"""
+        root = getattr(self, "root", None)
+        if root is None:
+            return
+        try:
+            root.after(0, self.refresh_devices)
+        except Exception:
+            pass
+
+    def _phone_connection_info(self):
+        """返回当前手机连接信息：{connected, name, capabilities, data_interval_ms}。
+
+        手机由 Web 服务（WebService）托管。只有 Web 服务有已连接客户端、
+        且最近 3 秒内确实收到手机数据（hello/传感器/按钮）才算"已连接"——
+        手机页面在后台挂起时只保持 WebSocket 不传数据，不视为连接。
+        """
+        info = {
+            "connected": False,
+            "name": "",
+            "capabilities": [],
+            "data_interval_ms": None,
+        }
+        try:
+            import time as _time
+
+            web = getattr(self, "_web_service", None)
+            if web is not None and web.is_phone_connected:
+                last = web.last_data_ts
+                if last is not None and (_time.time() - last) < 3.0:
+                    info["connected"] = True
+                    info["data_interval_ms"] = web.data_interval_ms
+                    parser = getattr(web, "_parser", None)
+                    if parser is not None:
+                        info["name"] = parser.device_name
+                        info["capabilities"] = parser.device_capabilities
+        except Exception:
+            pass
+        return info
+
+    def _check_phone_state_change(self):
+        """轮询手机连接状态：变化时提示并刷新设备树（掉线自动移除手机节点）。"""
+        try:
+            info = self._phone_connection_info()
+            was = getattr(self, "_phone_was_connected", False)
+            # 数据到达间隔变化（每 5ms 档）也触发刷新，让设备树实时更新平均延时
+            di = info["data_interval_ms"]
+            di_key = int(di / 5) if di is not None else None
+            key = (info["connected"], info["name"], tuple(info["capabilities"]), di_key)
+            if key == getattr(self, "_phone_state_key", None):
+                # 状态未变时，周期性向日志文件写心跳（约每 2 秒），记录持续传输情况
+                self._hb = getattr(self, "_hb", 0) + 1
+                if info["connected"] and self._hb % 10 == 0:
+                    di = info["data_interval_ms"]
+                    di_text = f"{di}ms" if di is not None else "-"
+                    self._log_to_file(f"[心跳] 手机连接正常 平均延时={di_text}")
+                return
+            self._phone_state_key = key
+
+            if info["connected"] and not was:
+                self.log("✅ 手机已连接")
+            elif not info["connected"] and was:
+                self.log("⚠️ 手机已断开连接（已从设备树移除）")
+            self._phone_was_connected = info["connected"]
+
+            di_text = f"{di}ms" if di is not None else "-"
+            self.log(
+                f"[手机] 已连接={info['connected']} "
+                f"名称={info['name'] or '-'} "
+                f"能力={', '.join(info['capabilities']) or '-'} "
+                f"平均延时={di_text}"
+            )
+            self._schedule_refresh_devices()
+        except Exception as error:
+            self.log(f"[手机] 状态检测失败: {error}")
+
+    def _check_device_changes(self):
+        """监控非手机设备（XInput/串口/HID 等）的连接/断开并记入日志。
+
+        手机由 Web 服务托管，已在 _check_phone_state_change 单独处理。
+        """
+        if self.app is None or not hasattr(self.app, "device_manager"):
+            return
+        try:
+            dm = self.app.device_manager
+
+            def is_phone(device):
+                conn = (device.get("connection") or {}).get("type") or device.get("driver", "")
+                return conn == "websocket" or device.get("driver") == "phone"
+
+            current = set()
+            for device in dm.online_devices():
+                if is_phone(device):
+                    continue
+                current.add((
+                    device.get("name", "?"),
+                    device.get("driver", "?"),
+                    device.get("index", 0),
+                ))
+
+            prev = getattr(self, "_device_set", set())
+            if current == prev:
+                return
+            self._device_set = current
+
+            for key in sorted(current - prev):
+                self.log(f"设备连接: {key[0]} (driver={key[1]})")
+            for key in sorted(prev - current):
+                self.log(f"设备断开: {key[0]} (driver={key[1]})")
+
+            self._schedule_refresh_devices()
+        except Exception:
+            pass
+
+    def _check_output_snapshot(self):
+        """每秒采样一次输出值写入日志文件（查看游戏实际收到的输出）。"""
+        self._out_counter = getattr(self, "_out_counter", 0) + 1
+        if self._out_counter % 5 != 0:  # 200ms tick × 5 ≈ 1 秒
+            return
+        if self.app is None or not hasattr(self.app, "status_monitor"):
+            return
+        try:
+            monitor = self.app.status_monitor
+            outs = monitor.snapshot_outputs()
+            parts = []
+            for target in ("left_x", "left_y", "right_x", "right_y",
+                           "left_trigger", "right_trigger"):
+                if target in outs:
+                    parts.append(f"{target}={outs[target]:.2f}")
+            if parts:
+                self._log_to_file("[输出] " + "  ".join(parts))
+        except Exception:
+            pass
+
     #
     # Device tree
     #
@@ -1251,6 +1594,27 @@ class CapabilityNexusGUI:
     def refresh_devices(self):
         self.device_tree.delete(*self.device_tree.get_children())
 
+        try:
+            self._refresh_devices_impl()
+        except Exception as error:
+            import traceback
+
+            print("[DeviceTree] refresh_devices failed:")
+            traceback.print_exc()
+            self.log(f"设备树刷新失败: {error}")
+
+        from tools.latency import color_for
+
+        self.device_tree.tag_configure("latency_low", foreground=color_for("low"))
+        self.device_tree.tag_configure("latency_medium", foreground=color_for("medium"))
+        self.device_tree.tag_configure("latency_high", foreground=color_for("high"))
+        self.device_tree.tag_configure("mapped", foreground="#2e7d32")
+        self.device_tree.tag_configure("info", foreground="#94a3b8")
+        self.device_tree.tag_configure("device", font=("Segoe UI", 10, "bold"))
+
+        self.refresh_mappings()
+
+    def _refresh_devices_impl(self):
         data = config_io.load_config()
         packages = config_io.list_package_capabilities()
         profile = config_io.load_profile()
@@ -1258,9 +1622,9 @@ class CapabilityNexusGUI:
         mapped = set(mappings.keys())
 
         # 引擎运行时：只显示当前在线的设备；未运行时显示 config 记录
-        if self.app is not None and hasattr(self.app, "device_manager"):
-            online = self.app.device_manager.online_devices()
-            devices = online
+        engine_running = self.app is not None and hasattr(self.app, "device_manager")
+        if engine_running:
+            devices = self.app.device_manager.online_devices()
         else:
             devices = data.get("devices", [])
 
@@ -1272,74 +1636,147 @@ class CapabilityNexusGUI:
 
             return config_io.mapping_desc(m)
 
-        for device in devices:
-            name = device.get("name", "?")
-            package = device.get("package", "")
-            conn = config_io.device_conn_label(device)
+        def is_phone(device):
+            conn = (device.get("connection") or {}).get("type") or device.get("driver", "")
+            return conn == "websocket" or device.get("driver") == "phone"
 
-            device_node = self.device_tree.insert(
-                "",
+        # 正常设备（phone 除外，手机节点由 WebService 连接状态统一渲染）
+        for device in devices:
+            if is_phone(device):
+                continue
+            self._insert_device_node(device, device.get("name", "?"), "", [],
+                                     packages, mapped, mapped_target)
+
+        # 手机节点：WebService 连上才显示；掉线后由轮询检测移除（不显示离线节点）
+        phone_info = self._phone_connection_info()
+        if phone_info["connected"]:
+            phone_name = phone_info["name"] or "Phone"
+            phone_status = " " + self.t("tree_connected")
+            phone_caps = phone_info["capabilities"]
+            # 平均数据到达间隔 ≈ 平均延时（服务端纯计时，不增加任何传输数据）
+            data_ms = phone_info["data_interval_ms"]
+            latency_text = None
+            latency_level = None
+            if data_ms:
+                if data_ms <= 15:
+                    latency_level = "low"
+                elif data_ms <= 40:
+                    latency_level = "medium"
+                else:
+                    latency_level = "high"
+                latency_text = f"{self.t('tree_latency')}~{data_ms}ms(实测)"
+            phone_device = {
+                "name": phone_name,
+                "package": "phone",
+                "driver": "phone",
+                "connection": {"type": "websocket"},
+                "preset_id": "phone_web_wheel",
+            }
+            self._insert_device_node(phone_device, phone_name, phone_status, phone_caps,
+                                     packages, mapped, mapped_target,
+                                     latency_text=latency_text,
+                                     latency_level=latency_level)
+
+    def _insert_device_node(self, device, name, status_suffix, phone_caps,
+                            packages, mapped, mapped_target, measured_ms=None,
+                            latency_text=None, latency_level=None):
+        """插入一个设备节点及其能力分组（手机/普通设备共用）。
+
+        measured_ms: 实测延时（毫秒），优先显示实测单程延时。
+        latency_text / latency_level: 直接覆盖第二列的延时文本与颜色等级（如数据到达间隔）。
+        """
+        conn = config_io.device_conn_label(device)
+        connection = device.get("connection", {})
+        conn_type = connection.get("type") or device.get("driver", "")
+        scheme = device.get("preset_id")  # 方案 id（如 phone_web_wheel）可细化延时
+
+        # 延时评估：优先自定义文本/实测值，否则按连接类型估算，着色显示
+        from tools.latency import describe, level_for, label_for
+
+        if latency_text is not None:
+            _dev_tag = f"latency_{latency_level or 'medium'}"
+            lat_text = latency_text
+        elif measured_ms is not None:
+            _lat_level = level_for(measured_ms)
+            _lat_label = label_for(_lat_level)
+            lat_text = f"{self.t('tree_latency')}~{measured_ms}ms({_lat_label})"
+            _dev_tag = f"latency_{_lat_level}"
+        else:
+            _lat_ms, _lat_level, _lat_label, _lat_color = describe(conn_type, scheme)
+            lat_text = f"{self.t('tree_latency')}~{_lat_ms}ms({_lat_label})"
+            _dev_tag = f"latency_{_lat_level}"
+
+        device_node = self.device_tree.insert(
+            "",
+            tk.END,
+            text=f"{name}  [{conn}]{status_suffix}",
+            values=(lat_text,),
+            tags=("device", _dev_tag),
+            open=True,
+        )
+
+        # 手机上报的实际能力（陀螺仪/震动/GPS 等）
+        if phone_caps:
+            cap_labels = ", ".join(
+                self.PHONE_CAP_LABELS.get(c, c) for c in phone_caps if c
+            )
+            self.device_tree.insert(
+                device_node,
                 tk.END,
-                text=f"{name}  [{conn}]",
+                text=f"{self.t('tree_reported_caps')}: {cap_labels}",
                 values=("",),
-                tags=("device",),
+                tags=("info",),
+            )
+
+        info = packages.get(device.get("package", ""))
+
+        if not info:
+            return
+
+        inputs = info.get("capabilities_full", [])
+        outputs = info.get("outputs_full", [])
+
+        if inputs:
+            input_node = self.device_tree.insert(
+                device_node,
+                tk.END,
+                text=self.t("tree_input"),
+                values=("",),
+                tags=("group",),
                 open=True,
             )
 
-            info = packages.get(package)
+            for cap in inputs:
+                cap_id = cap.get("id", cap)
 
-            if not info:
-                continue
-
-            inputs = info.get("capabilities_full", [])
-            outputs = info.get("outputs_full", [])
-
-            if inputs:
-                input_node = self.device_tree.insert(
-                    device_node,
+                self.device_tree.insert(
+                    input_node,
                     tk.END,
-                    text=self.t("tree_input"),
-                    values=("",),
-                    tags=("group",),
-                    open=True,
+                    text=cap_id,
+                    values=(mapped_target(cap_id),),
+                    tags=("capability", "mapped") if cap_id in mapped else ("capability",),
                 )
 
-                for cap in inputs:
-                    cap_id = cap.get("id", cap)
+        if outputs:
+            output_node = self.device_tree.insert(
+                device_node,
+                tk.END,
+                text=self.t("tree_output"),
+                values=("",),
+                tags=("group",),
+                open=True,
+            )
 
-                    self.device_tree.insert(
-                        input_node,
-                        tk.END,
-                        text=cap_id,
-                        values=(mapped_target(cap_id),),
-                        tags=("capability", "mapped") if cap_id in mapped else ("capability",),
-                    )
+            for cap in outputs:
+                cap_id = cap.get("id", cap)
 
-            if outputs:
-                output_node = self.device_tree.insert(
-                    device_node,
+                self.device_tree.insert(
+                    output_node,
                     tk.END,
-                    text=self.t("tree_output"),
-                    values=("",),
-                    tags=("group",),
-                    open=True,
+                    text=cap_id,
+                    values=(mapped_target(cap_id),),
+                    tags=("capability", "mapped") if cap_id in mapped else ("capability",),
                 )
-
-                for cap in outputs:
-                    cap_id = cap.get("id", cap)
-
-                    self.device_tree.insert(
-                        output_node,
-                        tk.END,
-                        text=cap_id,
-                        values=(mapped_target(cap_id),),
-                        tags=("capability", "mapped") if cap_id in mapped else ("capability",),
-                    )
-
-        self.device_tree.tag_configure("mapped", foreground="#2e7d32")
-        self.device_tree.tag_configure("device", font=("Segoe UI", 10, "bold"))
-
-        self.refresh_mappings()
 
     def _on_tree_double_click(self, event):
         selection = self.device_tree.selection()
@@ -1428,18 +1865,12 @@ class CapabilityNexusGUI:
 
         ttk.Label(dialog, text=self.t("dlg_output_device")).pack(padx=8, pady=(10, 2))
 
-        from output.devices import OUTPUT_DEVICES
         from tools.config_io import load_outputs
 
         enabled_outputs = load_outputs().get("outputs", [])
 
-        # 类型 -> 注册表能力
-        type_to_info = {
-            "xinput": next((d for d in OUTPUT_DEVICES if d.id == "virtual_x360"), None),
-            "ds4": next((d for d in OUTPUT_DEVICES if d.id == "virtual_ds4"), None),
-            "keyboard": next((d for d in OUTPUT_DEVICES if d.id == "virtual_keyboard"), None),
-            "mouse": next((d for d in OUTPUT_DEVICES if d.id == "virtual_mouse"), None),
-        }
+        # 类型 -> 注册表能力（复用 _output_type_info）
+        type_to_info = self._output_type_info()
 
         if not enabled_outputs:
             ttk.Label(
@@ -1481,8 +1912,6 @@ class CapabilityNexusGUI:
         target_combo = ttk.Combobox(target_frame, textvariable=target_var, state="readonly")
         target_combo.pack(fill=tk.X)
 
-        self._device_targets = {}
-
         def get_entry_info(out_id):
             entry = next((e for e in enabled_outputs if e.get("id") == out_id), None)
             if not entry:
@@ -1494,7 +1923,6 @@ class CapabilityNexusGUI:
             info = get_entry_info(out_id)
 
             if info:
-                self._device_targets = info.targets
                 target_combo["values"] = list(info.targets.keys())
 
                 if current:
@@ -3226,6 +3654,7 @@ class CapabilityNexusGUI:
             self.app = CapabilityNexusApp()
             self.log("Engine started.")
             self._set_engine_badge(True)
+            self._ensure_phone_vibration_sub()
         except Exception as e:
             self.log(f"Engine start failed: {e}")
             self._set_engine_badge(False)
@@ -3335,11 +3764,54 @@ class CapabilityNexusGUI:
     # Log
     #
 
+    def open_log_file(self):
+        """用系统默认程序打开日志文件（方便随时查看）。"""
+        try:
+            log_dir = os.path.join(config_io.PROJECT_ROOT, "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            path = os.path.join(log_dir, "client.log")
+            if not os.path.exists(path):
+                with open(path, "a", encoding="utf-8"):
+                    pass
+            if sys.platform.startswith("win"):
+                os.startfile(path)
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", path])
+        except Exception as error:
+            self.log(f"打开日志失败: {error}")
+
     def log(self, message):
         self.log_text.config(state=tk.NORMAL)
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
+        self._log_to_file(message)
+
+    def _log_to_file(self, message):
+        """把日志写入文件（带时间戳），方便玩游戏后回看排查。
+
+        位置：<项目根>/logs/client.log（frozen 下为 exe 同级 logs/）。
+        超过 2MB 自动轮转为 client.log.old。
+        """
+        try:
+            log_dir = os.path.join(config_io.PROJECT_ROOT, "logs")
+            os.makedirs(log_dir, exist_ok=True)
+            path = os.path.join(log_dir, "client.log")
+
+            # 简单轮转：超过 2MB 时把旧文件留为 .old
+            try:
+                if os.path.exists(path) and os.path.getsize(path) > 2 * 1024 * 1024:
+                    os.replace(path, os.path.join(log_dir, "client.log.old"))
+            except OSError:
+                pass
+
+            ts = time.strftime("%Y-%m-%d %H:%M:%S")
+            ms = int(time.time() * 1000) % 1000
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}.{ms:03d}] {message}\n")
+        except Exception:
+            pass
 
 
 def main():

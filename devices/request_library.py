@@ -2,6 +2,8 @@ import json
 import os
 import urllib.request
 
+from devices.remote_library import RemoteJsonLibrary
+
 
 DEFAULT_LIBRARY_URL = (
     "https://raw.githubusercontent.com/nidoto/"
@@ -40,14 +42,21 @@ def _local_library_path():
 
 LOCAL_LIBRARY_PATH = _local_library_path()
 
-DEFAULT_CACHE_PATH = os.path.join("config", "request_library_cache.json")
+# 缓存路径：与 config_io 对齐（打包 exe 下基于 _MEIPASS 的绝对路径）
+_PROJECT_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+if getattr(__import__("sys"), "frozen", False):
+    import sys as _sys
+    _PROJECT_ROOT = getattr(_sys, "_MEIPASS", None) or os.path.dirname(_sys.executable)
+DEFAULT_CACHE_PATH = os.path.join(_PROJECT_ROOT, "config", "request_library_cache.json")
 
 # 可执行文件名匹配（忽略大小写、去空格）
 def _norm(name):
     return (name or "").strip().lower()
 
 
-class RequestLibrary:
+class RequestLibrary(RemoteJsonLibrary):
 
     #
     # 反向需求库：
@@ -59,35 +68,17 @@ class RequestLibrary:
     #   → 下载该程序的 requests.json → 客户端知道它需要哪些反向能力
     #
 
+    DATA_KEY = "programs"
+    LOG_PREFIX = "[RequestLibrary]"
+
     def __init__(self, library_url=None, cache_path=None):
-        self.library_url = library_url or DEFAULT_LIBRARY_URL
-        self.cache_path = cache_path or DEFAULT_CACHE_PATH
-        self._entries = None
-
-    def _load_cached(self):
-        if not self.cache_path or not os.path.exists(self.cache_path):
-            return None
-
-        try:
-            with open(self.cache_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print("[RequestLibrary] Cache read failed:", e)
-            return None
-
-    def _save_cache(self, data):
-        if not self.cache_path:
-            return
-
-        try:
-            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
-            with open(self.cache_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print("[RequestLibrary] Cache write failed:", e)
+        super().__init__(
+            cache_path=cache_path or DEFAULT_CACHE_PATH,
+            library_url=library_url or DEFAULT_LIBRARY_URL,
+        )
 
     def refresh(self, allow_network=True):
-        """加载索引：本地库优先，其次缓存，网络刷新可选（避免阻塞 GUI）"""
+        """加载索引：本地内置库优先，其次缓存，网络刷新可选（避免阻塞 GUI）"""
         # 本地内置游戏库（随客户端分发）
         if os.path.exists(LOCAL_LIBRARY_PATH):
             try:
@@ -99,40 +90,8 @@ class RequestLibrary:
             except Exception as e:
                 print("[RequestLibrary] Local library read failed:", e)
 
-        # 本地库文件（显式指定的路径）
-        if os.path.exists(self.library_url):
-            try:
-                with open(self.library_url, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                self._entries = data.get("programs", data.get("entries", []))
-                self._save_cache(data)
-                print("[RequestLibrary] Loaded local file:", len(self._entries))
-                return
-            except Exception as e:
-                print("[RequestLibrary] Local file read failed:", e)
-
-        # 缓存优先：有缓存就用缓存，不联网
-        cached = self._load_cached()
-        if cached:
-            self._entries = cached.get("programs", cached.get("entries", []))
-            print("[RequestLibrary] Used cache:", len(self._entries))
-
-        # 需要网络时再尝试刷新（短超时）
-        if allow_network:
-            try:
-                req = urllib.request.Request(
-                    self.library_url,
-                    headers={"User-Agent": "CapabilityNexus"},
-                )
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                self._entries = data.get("programs", data.get("entries", []))
-                self._save_cache(data)
-                print("[RequestLibrary] Refreshed from GitHub:", len(self._entries))
-            except Exception as e:
-                print("[RequestLibrary] GitHub refresh failed:", e)
-                if self._entries is None:
-                    self._entries = []
+        # 其余走基类：本地文件 → 缓存 → 网络
+        super().refresh(allow_network=allow_network)
 
     def list_programs(self):
         if self._entries is None:
@@ -206,31 +165,8 @@ class RequestLibrary:
                 filename,
             )
 
-        if os.path.exists(self.library_url):
-            return os.path.join(
-                os.path.dirname(self.library_url),
-                "programs",
-                program_id,
-                filename,
-            )
-
-        base = self.library_url.rsplit("/", 1)[0]
-        return f"{base}/programs/{program_id}/{filename}"
-
-    def _fetch_file(self, url):
-        if url.startswith("http"):
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": "CapabilityNexus"},
-            )
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-
-        if os.path.exists(url):
-            with open(url, "r", encoding="utf-8") as f:
-                return json.load(f)
-
-        raise FileNotFoundError(url)
+        # 其余走基类（本地文件/网络 URL）
+        return super()._file_url(program_id, filename, subdir="programs")
 
     def download(self, program_id):
         """下载并导入指定程序的反向需求配置"""
@@ -264,11 +200,3 @@ class RequestLibrary:
         ]
 
         return any(query in _norm(f) for f in fields if f)
-
-    def save_local(self, path):
-        """导出索引到本地（供备份 / 手动分享）"""
-        if self._entries is None:
-            self.refresh()
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump({"programs": self._entries}, f, ensure_ascii=False, indent=2)

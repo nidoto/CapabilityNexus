@@ -54,6 +54,29 @@ def test_parser_buttons_edge():
     assert a_streams[-1].value == 0.0
 
 
+def test_parser_buttons_inside_sensors_frame():
+    """sendAll 把 buttons 放在 sensors 帧里，应同样解析（含 back/start）。"""
+    collector = Collector()
+    parser = PhoneFrameParser(collector)
+
+    parser.parse(json.dumps({
+        "t": "sensors",
+        "roll": 0.0,
+        "buttons": {"a": True, "back": True},
+    }))
+    ids = {s.id: s.value for s in collector.streams}
+    assert ids.get("phone.button_a") == 1.0
+    assert ids.get("phone.button_back") == 1.0
+
+    parser.parse(json.dumps({
+        "t": "sensors",
+        "buttons": {"back": False, "start": True},
+    }))
+    ids = {s.id: s.value for s in collector.streams}
+    assert ids.get("phone.button_back") == 0.0
+    assert ids.get("phone.button_start") == 1.0
+
+
 def test_parser_invalid_json_ignored():
     collector = Collector()
     parser = PhoneFrameParser(collector)

@@ -39,7 +39,11 @@ class ProcessorFactory:
 
                 config["input_min"],
 
-                config["input_max"]
+                config["input_max"],
+
+                config.get("output_min", -32768),
+
+                config.get("output_max", 32767)
 
             )
             

@@ -3,43 +3,114 @@ import os
 import tempfile
 
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _project_root():
+    """用户数据根目录：兼容源码运行与打包 exe。
+
+    源码：本文件位于 <root>/tools/config_io.py → 返回 <root>。
+    frozen：用户配置存 exe 同级目录（可写、持久，重打包不丢）；
+    内置默认值在 _MEIPASS，读取时回退。
+    """
+    import sys as _sys
+
+    if getattr(_sys, "frozen", False):
+        return os.path.dirname(_sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _builtin_root():
+    """内置默认数据目录（frozen 下为 _MEIPASS；源码下同用户根）。"""
+    import sys as _sys
+
+    if getattr(_sys, "frozen", False):
+        return getattr(_sys, "_MEIPASS", None) or _project_root()
+    return _project_root()
+
+
+def _read_json(path):
+    """读取 JSON，失败返回 None。"""
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return None
+
+
+def _read_first(preferred, fallback):
+    """优先读 preferred（用户），否则回退内置 fallback。"""
+    data = _read_json(preferred)
+    if data is None:
+        data = _read_json(fallback)
+    return data
+
+
+def _profile_path_user(name):
+    """用户 profile 路径（exe 同级 / 源码 profiles）。"""
+    return os.path.join(PROJECT_ROOT, "profiles", f"{name}.json")
+
+
+def _profile_path_builtin(name):
+    """内置 profile 路径（frozen 下 _MEIPASS）。"""
+    return os.path.join(_builtin_root(), "profiles", f"{name}.json")
+
+
+PROJECT_ROOT = _project_root()
+BUILTIN_ROOT = _builtin_root()
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "config", "devices.json")
 OUTPUTS_PATH = os.path.join(PROJECT_ROOT, "config", "outputs.json")
-PACKAGES_PATH = os.path.join(PROJECT_ROOT, "packages")
+PACKAGES_PATH = os.path.join(BUILTIN_ROOT, "packages")
 PROFILE_PATH = os.path.join(PROJECT_ROOT, "profiles", "default.json")
 PROFILES_DIR = os.path.join(PROJECT_ROOT, "profiles")
 ACTIVE_PROFILE_PATH = os.path.join(PROJECT_ROOT, "config", "active_profile.json")
+CLIENT_SETTINGS_PATH = os.path.join(PROJECT_ROOT, "config", "client.json")
+
+
+def load_client_settings():
+    """读取客户端设置（语言等），无则返回默认 dict。"""
+    data = _read_json(CLIENT_SETTINGS_PATH)
+    if data is None:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_client_settings(data):
+    """保存客户端设置（语言等）到 config/client.json。"""
+    if not isinstance(data, dict):
+        return
+    _save_json(CLIENT_SETTINGS_PATH, data)
+
+
+def load_client_language(default="zh"):
+    """读取已保存的界面语言。"""
+    return load_client_settings().get("language") or default
+
+
+def save_client_language(lang):
+    """保存界面语言。"""
+    settings = load_client_settings()
+    settings["language"] = lang
+    save_client_settings(settings)
 
 
 def load_config():
-    try:
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                return {"devices": []}
-            devices = data.get("devices", [])
-            data["devices"] = devices if isinstance(devices, list) else []
-            return data
-    except (OSError, json.JSONDecodeError) as error:
-        print("[Config] Failed to load devices:", error)
-    return {"devices": []}
+    data = _read_first(CONFIG_PATH, os.path.join(BUILTIN_ROOT, "config", "devices.json"))
+    if data is None:
+        return {"devices": []}
+    devices = data.get("devices", [])
+    data["devices"] = devices if isinstance(devices, list) else []
+    return data
 
 
 def load_outputs():
-    try:
-        if os.path.exists(OUTPUTS_PATH):
-            with open(OUTPUTS_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if not isinstance(data, dict):
-                return {"outputs": []}
-            outputs = data.get("outputs", [])
-            data["outputs"] = outputs if isinstance(outputs, list) else []
-            return data
-    except (OSError, json.JSONDecodeError) as error:
-        print("[Config] Failed to load outputs:", error)
-    return {"outputs": []}
+    data = _read_first(OUTPUTS_PATH, os.path.join(BUILTIN_ROOT, "config", "outputs.json"))
+    if data is None:
+        return {"outputs": []}
+    outputs = data.get("outputs", [])
+    data["outputs"] = outputs if isinstance(outputs, list) else []
+    return data
 
 
 def save_outputs(data):
@@ -80,7 +151,7 @@ def list_profiles():
 
 
 def _profile_path(name):
-    """定位配置路径：local/ 优先，其次 profiles/ 根目录。"""
+    """定位配置路径：local/ 优先，其次 profiles/ 根目录（含内置回退）。"""
     local_dir = os.path.join(PROFILES_DIR, "local")
     if name:
         local_path = os.path.join(local_dir, f"{name}.json")
@@ -89,6 +160,10 @@ def _profile_path(name):
         root_path = os.path.join(PROFILES_DIR, f"{name}.json")
         if os.path.exists(root_path):
             return root_path
+        # frozen 下回退到内置
+        builtin_path = os.path.join(BUILTIN_ROOT, "profiles", f"{name}.json")
+        if os.path.exists(builtin_path):
+            return builtin_path
     return os.path.join(PROFILES_DIR, f"{name}.json")
 
 

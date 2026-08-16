@@ -17,6 +17,7 @@ def _write_profile(dir_path, name, data):
 def test_load_profile_empty_when_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(config_io, "PROFILES_DIR", str(tmp_path))
     monkeypatch.setattr(config_io, "ACTIVE_PROFILE_PATH", str(tmp_path / "active.json"))
+    monkeypatch.setattr(config_io, "BUILTIN_ROOT", str(tmp_path))
 
     assert config_io.load_profile() == {"mappings": {}}
 

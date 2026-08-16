@@ -14,7 +14,9 @@ def load_custom_connection(callback, params):
     #       return MyConnection(callback, **params)
     #
 
-    script = os.path.join("config", "custom_connections.py")
+    from tools.config_io import PROJECT_ROOT
+
+    script = os.path.join(PROJECT_ROOT, "config", "custom_connections.py")
 
     if not os.path.exists(script):
         print("[CustomConnection] No config/custom_connections.py found")

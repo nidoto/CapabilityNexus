@@ -46,8 +46,6 @@ class VirtualKeyboard(OutputDevice):
             return
 
         try:
-            from pynput.keyboard import Key
-
             key = self._resolve_key(key_name)
 
             if pressed:

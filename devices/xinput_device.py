@@ -2,42 +2,24 @@ import ctypes
 import threading
 import time
 
-from ctypes import wintypes
-
 from core.stream import StreamData
-
-
-#
-# XInput 按钮位掩码
-#
-
-XINPUT_GAMEPAD_DPAD_UP = 0x0001
-XINPUT_GAMEPAD_DPAD_DOWN = 0x0002
-XINPUT_GAMEPAD_DPAD_LEFT = 0x0004
-XINPUT_GAMEPAD_DPAD_RIGHT = 0x0008
-XINPUT_GAMEPAD_START = 0x0010
-XINPUT_GAMEPAD_BACK = 0x0020
-XINPUT_GAMEPAD_LEFT_THUMB = 0x0040
-XINPUT_GAMEPAD_RIGHT_THUMB = 0x0080
-XINPUT_GAMEPAD_LEFT_SHOULDER = 0x0100
-XINPUT_GAMEPAD_RIGHT_SHOULDER = 0x0200
-XINPUT_GAMEPAD_A = 0x1000
-XINPUT_GAMEPAD_B = 0x2000
-XINPUT_GAMEPAD_X = 0x4000
-XINPUT_GAMEPAD_Y = 0x8000
-
-
-class XINPUT_STATE(ctypes.Structure):
-    _fields_ = [
-        ("dwPacketNumber", wintypes.DWORD),
-        ("wButtons", wintypes.WORD),
-        ("bLeftTrigger", ctypes.c_ubyte),
-        ("bRightTrigger", ctypes.c_ubyte),
-        ("sThumbLX", ctypes.c_short),
-        ("sThumbLY", ctypes.c_short),
-        ("sThumbRX", ctypes.c_short),
-        ("sThumbRY", ctypes.c_short),
-    ]
+from devices.xinput_api import XINPUT_GAMEPAD_A
+from devices.xinput_api import XINPUT_GAMEPAD_B
+from devices.xinput_api import XINPUT_GAMEPAD_BACK
+from devices.xinput_api import XINPUT_GAMEPAD_DPAD_DOWN
+from devices.xinput_api import XINPUT_GAMEPAD_DPAD_LEFT
+from devices.xinput_api import XINPUT_GAMEPAD_DPAD_RIGHT
+from devices.xinput_api import XINPUT_GAMEPAD_DPAD_UP
+from devices.xinput_api import XINPUT_GAMEPAD_LEFT_SHOULDER
+from devices.xinput_api import XINPUT_GAMEPAD_LEFT_THUMB
+from devices.xinput_api import XINPUT_GAMEPAD_RIGHT_SHOULDER
+from devices.xinput_api import XINPUT_GAMEPAD_RIGHT_THUMB
+from devices.xinput_api import XINPUT_GAMEPAD_START
+from devices.xinput_api import XINPUT_GAMEPAD_X
+from devices.xinput_api import XINPUT_GAMEPAD_Y
+from devices.xinput_api import XINPUT_STATE
+from devices.xinput_api import get_state
+from devices.xinput_api import load_xinput
 
 
 class XInputDevice:
@@ -47,17 +29,13 @@ class XInputDevice:
         """返回已连接 XInput 设备的槽位列表 [0, 1, ...]"""
         connected = []
 
-        try:
-            xinput = ctypes.windll.xinput1_4
+        xinput = load_xinput()
+        if xinput is None:
+            return connected
 
-            for index in range(4):
-                state = XINPUT_STATE()
-                result = xinput.XInputGetState(index, ctypes.byref(state))
-
-                if result == 0:
-                    connected.append(index)
-        except Exception:
-            pass
+        for index in range(4):
+            if get_state(xinput, index) is not None:
+                connected.append(index)
 
         return connected
 
@@ -74,10 +52,8 @@ class XInputDevice:
         self._last_state = None
 
     def connect(self):
-        try:
-            self._xinput = ctypes.windll.xinput1_4
-        except Exception as e:
-            print("[XInputDevice] Failed to load xinput1_4:", e)
+        self._xinput = load_xinput()
+        if self._xinput is None:
             return False
 
         self.running = True
@@ -105,12 +81,9 @@ class XInputDevice:
                 print(f"[XInputDevice] Controller {self.index} connected")
 
             # 始终发布当前状态，保证实时监控显示最新值
+            self._emit_state(state)
             if self._last_state is None or state.dwPacketNumber != self._last_state.dwPacketNumber:
-                self._emit_state(state)
                 self._last_state = state
-            else:
-                # 状态未变化时也发布（供实时监控持续显示）
-                self._emit_state(state)
 
             time.sleep(self.poll_interval)
 

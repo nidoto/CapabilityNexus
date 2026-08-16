@@ -1,3 +1,6 @@
+# vgamepad 在此显式导入，确保 PyInstaller 打包时收集其模块与 DLL
+import vgamepad  # noqa: F401
+
 from output.base import OutputDevice
 
 
@@ -49,6 +52,18 @@ class VGamepadDevice(OutputDevice):
             print(f"[{type(self).__name__}] Virtual gamepad Created")
         except Exception as e:
             print(f"[{type(self).__name__}] XInput-compatible backend unavailable, using stub:", e)
+            # 诊断日志：打包 exe 下排查 vgamepad 加载失败
+            try:
+                import os as _os, traceback as _tb
+                _diag = _os.path.join(
+                    _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                    "vg_diag.txt",
+                )
+                with open(_diag, "w", encoding="utf-8") as _f:
+                    _f.write(f"vgamepad init failed: {e}\n")
+                    _f.write(_tb.format_exc())
+            except Exception:
+                pass
 
     @property
     def real(self):

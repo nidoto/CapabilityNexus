@@ -13,13 +13,19 @@ import tempfile
 
 
 def _cert_dir():
-    """证书目录：exe 运行时放在 exe 同级 config/certs（可写）；
-    源码运行时放在项目 config/certs。"""
+    """证书目录：优先使用可写的 exe 同级 config/certs；
+    若不存在则回退到 _MEIPASS（打包内置的证书）。"""
     import sys as _sys
 
     if getattr(_sys, "frozen", False):
+        # 1) exe 同级（可写，运行时生成/持久）
         exe_dir = os.path.dirname(_sys.executable)
-        base = os.path.join(exe_dir, "config")
+        exe_certs = os.path.join(exe_dir, "config", "certs")
+        if os.path.isdir(exe_certs) and os.listdir(exe_certs):
+            return exe_certs
+        # 2) _MEIPASS（打包内置证书）
+        meipass = getattr(_sys, "_MEIPASS", None) or exe_dir
+        return os.path.join(meipass, "config", "certs")
     else:
         base = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -48,6 +54,7 @@ def ensure_certs():
         from cryptography.hazmat.primitives.asymmetric import rsa
         from cryptography.x509.oid import NameOID
     except ImportError:
+        _write_diag("cryptography import failed")
         print("[Certs] cryptography not installed - HTTPS disabled")
         return None, None
 
@@ -91,8 +98,26 @@ def ensure_certs():
         print(f"[Certs] Self-signed cert generated: {CERT_FILE}")
         return CERT_FILE, KEY_FILE
     except Exception as error:
+        _write_diag(f"cert generation failed: {error}")
         print(f"[Certs] Cert generation failed: {error}")
         return None, None
+
+
+def _write_diag(message):
+    """把证书问题写入 exe 同级诊断文件（frozen 下排查用）。"""
+    try:
+        import sys as _sys
+
+        if getattr(_sys, "frozen", False):
+            base = os.path.dirname(_sys.executable)
+        else:
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(base, "cert_diag.txt"), "w", encoding="utf-8") as f:
+            f.write(f"{message}\n")
+            import traceback as _tb
+            f.write(_tb.format_exc())
+    except Exception:
+        pass
 
 
 def ssl_context():
@@ -108,5 +133,6 @@ def ssl_context():
         context.load_cert_chain(certfile=cert, keyfile=key)
         return context
     except ssl.SSLError as error:
+        _write_diag(f"SSL context failed: {error}")
         print(f"[Certs] SSL context failed: {error}")
         return None

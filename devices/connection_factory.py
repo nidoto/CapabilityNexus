@@ -53,7 +53,7 @@ class ConnectionFactory:
 
             connection = load_custom_connection(callback, params.get("params", {}))
             if connection is None:
-                raise Exception("Custom connection not configured")
+                raise ValueError("Custom connection not configured")
             return connection
 
-        raise Exception(f"Unknown connection type: {connection_type}")
+        raise ValueError(f"Unknown connection type: {connection_type}")

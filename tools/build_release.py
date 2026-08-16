@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 
 INCLUDE_DIRS = (
     "core",
@@ -134,7 +134,23 @@ def build_source(out_dir):
             }
         ],
     }
-    default_profile = {"mappings": {}}
+    # 默认 profile：手机（phone.*）与基础能力映射到 X360 输出
+    default_profile = {
+        "mappings": {
+            "phone.roll": "right_x",
+            "phone.pitch": "right_y",
+            "phone.gas": "right_trigger",
+            "phone.brake": "left_trigger",
+            "phone.button_a": "button_a",
+            "phone.button_b": "button_b",
+            "phone.button_x": "button_x",
+            "phone.button_y": "button_y",
+            "phone.dpad_up": "button_dpad_up",
+            "phone.dpad_down": "button_dpad_down",
+            "phone.dpad_left": "button_dpad_left",
+            "phone.dpad_right": "button_dpad_right",
+        }
+    }
 
     _write_json(os.path.join(out_dir, "config", "devices.json"), default_config)
     _write_json(os.path.join(out_dir, "config", "outputs.json"), default_outputs)
@@ -178,11 +194,71 @@ def build_exe(out_dir):
     # exe 产物位于 windows/CapabilityNexus/
     exe_src = os.path.join(windows_dir, "CapabilityNexus")
     if os.path.exists(exe_src):
+        # 把手机页面复制到 exe 同级 web/（websocket_connection 的 _web_dir()
+        # 在 frozen 模式下优先读取这里，发布者可替换页面而无需重新打包）
+        web_src = os.path.join(out_dir, "web")
+        if os.path.isdir(web_src):
+            _copy_tree(web_src, os.path.join(exe_src, "web"))
+
+        # 用户数据目录（exe 同级 config/profiles）：填充默认值
+        # （frozen 下 config_io 读写这里；保留已存在文件，只补缺省）
+        _ensure_user_data(exe_src, out_dir)
+
         print(f"[Build] Executable: {exe_src}")
         return True
 
     print("[Build] PyInstaller output not found.")
     return False
+
+
+def _ensure_user_data(exe_src, out_dir):
+    """填充 exe 同级用户数据目录（config/profiles），保留已存在的用户配置。"""
+    # 1) 从发布目录 out_dir 复制默认（config/profiles 根，不含 local）
+    for rel in ("config", "profiles"):
+        user_dir = os.path.join(exe_src, rel)
+        built_dir = os.path.join(out_dir, rel)
+        if not os.path.isdir(user_dir):
+            os.makedirs(user_dir, exist_ok=True)
+        if os.path.isdir(built_dir):
+            for name in os.listdir(built_dir):
+                s = os.path.join(built_dir, name)
+                d = os.path.join(user_dir, name)
+                if os.path.isfile(s) and not os.path.exists(d):
+                    shutil.copy2(s, d)
+                elif os.path.isdir(s):
+                    if not os.path.isdir(d):
+                        shutil.copytree(s, d)
+
+    # 2) 从源码 profiles/local 复制个人调优配置（不含 local 不打包，但用户需要）
+    src_local = os.path.join(PROJECT_ROOT, "profiles", "local")
+    dst_local = os.path.join(exe_src, "profiles", "local")
+    if os.path.isdir(src_local):
+        if not os.path.isdir(dst_local):
+            os.makedirs(dst_local, exist_ok=True)
+        for name in os.listdir(src_local):
+            s = os.path.join(src_local, name)
+            d = os.path.join(dst_local, name)
+            if os.path.isfile(s) and not os.path.exists(d):
+                shutil.copy2(s, d)
+
+    # 3) 从源码 config 复制默认配置（active_profile.json 单独处理——
+    #    仅当 exe 用户目录还没有时才初始化，避免覆盖用户的运行时选择）
+    src_config = os.path.join(PROJECT_ROOT, "config")
+    dst_config = os.path.join(exe_src, "config")
+    if os.path.isdir(src_config):
+        os.makedirs(dst_config, exist_ok=True)
+        for name in ("devices.json", "outputs.json", "processors.json", "phone_presets.json"):
+            s = os.path.join(src_config, name)
+            d = os.path.join(dst_config, name)
+            if os.path.isfile(s) and not os.path.exists(d):
+                shutil.copy2(s, d)
+
+    # 4) 初始激活配置：若用户目录还没有，且源码有 rushrally3，默认激活它
+    active_dst = os.path.join(dst_config, "active_profile.json")
+    if not os.path.exists(active_dst):
+        src_active = os.path.join(src_config, "active_profile.json")
+        if os.path.isfile(src_active):
+            shutil.copy2(src_active, active_dst)
 
 
 def build_drivers(out_dir, vigembus_src=None):

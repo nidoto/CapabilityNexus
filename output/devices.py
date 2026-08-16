@@ -9,7 +9,7 @@ class OutputDeviceInfo:
 
 OUTPUT_DEVICES = [
     OutputDeviceInfo(
-        "virtual_x360",
+        "virtual_xinput",
         "XInput-compatible Controller",
         "Standard game controller protocol (XInput compatible)",
         {

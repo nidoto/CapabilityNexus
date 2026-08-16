@@ -1,19 +1,7 @@
 import ctypes
 
-from ctypes import wintypes
-
-
-class XINPUT_STATE(ctypes.Structure):
-    _fields_ = [
-        ("dwPacketNumber", wintypes.DWORD),
-        ("wButtons", wintypes.WORD),
-        ("bLeftTrigger", ctypes.c_ubyte),
-        ("bRightTrigger", ctypes.c_ubyte),
-        ("sThumbLX", ctypes.c_short),
-        ("sThumbLY", ctypes.c_short),
-        ("sThumbRX", ctypes.c_short),
-        ("sThumbRY", ctypes.c_short),
-    ]
+from devices.xinput_api import get_state
+from devices.xinput_api import load_xinput
 
 
 class DeviceDetector:
@@ -29,31 +17,27 @@ class DeviceDetector:
     def _detect_xinput(self):
         found = []
 
-        try:
-            xinput = ctypes.windll.xinput1_4
-        except Exception as e:
-            print("[Detector] No xinput1_4:", e)
+        xinput = load_xinput()
+        if xinput is None:
             return found
 
         for index in range(4):
-            state = XINPUT_STATE()
-            result = xinput.XInputGetState(index, ctypes.byref(state))
-
-            if result == 0:
-                found.append(
-                    {
+            if get_state(xinput, index) is None:
+                continue
+            found.append(
+                {
+                    "type": "xinput",
+                    "index": index,
+                    "fingerprint": {
                         "type": "xinput",
                         "index": index,
-                        "fingerprint": {
-                            "type": "xinput",
-                            "index": index,
-                        },
-                    }
-                )
-                print(
-                    "[Detector] XInput controller at slot",
-                    index,
-                )
+                    },
+                }
+            )
+            print(
+                "[Detector] XInput controller at slot",
+                index,
+            )
 
         return found
 

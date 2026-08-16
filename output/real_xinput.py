@@ -1,15 +1,8 @@
 import ctypes
 
-from ctypes import wintypes
-
+from devices.xinput_api import XINPUT_VIBRATION
+from devices.xinput_api import load_xinput
 from output.base import OutputDevice
-
-
-class XINPUT_VIBRATION(ctypes.Structure):
-    _fields_ = [
-        ("wLeftMotorSpeed", wintypes.WORD),
-        ("wRightMotorSpeed", wintypes.WORD),
-    ]
 
 
 class RealXInputOutput(OutputDevice):
@@ -35,12 +28,10 @@ class RealXInputOutput(OutputDevice):
         self._init_xinput()
 
     def _init_xinput(self):
-        try:
-            self._xinput = ctypes.windll.xinput1_4
+        self._xinput = load_xinput()
+        if self._xinput is not None:
             self._real = True
             print("[RealXInput] Real Xbox output ready (slot", self.index, ")")
-        except Exception as e:
-            print("[RealXInput] No xinput1_4:", e)
 
     @property
     def real(self):

@@ -113,14 +113,6 @@ class StatusMonitor:
         with self._lock:
             return self.input_values.get(capability_id)
 
-    def get_output_value(self, target):
-        with self._lock:
-            return self.output_values.get(target)
-
-    def snapshot_inputs(self):
-        with self._lock:
-            return dict(self.input_values)
-
     def snapshot_outputs(self):
         with self._lock:
             return dict(self.output_values)
@@ -131,15 +123,6 @@ class StatusMonitor:
             self.input_values,
             self._input_baseline,
             self._input_last_update,
-            fresh_window,
-        )
-
-    def active_outputs(self, fresh_window=None):
-        """返回已连接且有真实输出的通道 {target: 最新值}"""
-        return self._active_snapshot(
-            self.output_values,
-            self._output_baseline,
-            self._output_last_update,
             fresh_window,
         )
 

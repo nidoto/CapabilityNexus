@@ -9,7 +9,7 @@ class OutputDeviceManager:
     # 管理用户启用的虚拟输出设备（可多个并存）。
     #
     # config/outputs.json:
-    #   { "outputs": [ { "id": "virtual_x360", "type": "xinput", "name": "..." } ] }
+    #   { "outputs": [ { "id": "virtual_xinput", "type": "xinput", "name": "..." } ] }
     #
 
     BACKENDS = {
@@ -20,7 +20,10 @@ class OutputDeviceManager:
     }
 
     def __init__(self, config_path=None, event_bus=None):
-        self.config_path = config_path or os.path.join("config", "outputs.json")
+        if config_path is None:
+            from tools.config_io import PROJECT_ROOT
+            config_path = os.path.join(PROJECT_ROOT, "config", "outputs.json")
+        self.config_path = config_path
         self.event_bus = event_bus
 
         self.outputs = []
@@ -82,8 +85,8 @@ class OutputDeviceManager:
             else:
                 instance = cls()
             return instance
-        except Exception as e:
-            print("[OutputManager] Instantiate failed:", config.get("id"), e)
+        except (ImportError, AttributeError) as error:
+            print("[OutputManager] Instantiate failed:", config.get("id"), error)
             return None
 
     def build_all(self):

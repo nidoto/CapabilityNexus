@@ -3,7 +3,7 @@
 连接真实硬件验证完整数据链路：
   1. ESP32（COM3 串口）→ 固件数据流（FRAME / X / Y）
   2. XInput 手柄 → 按键 / 摇杆状态
-  3. 引擎：输入能力 → 处理器 → 映射 → 虚拟 x360 输出
+  3. 引擎：输入能力 → 处理器 → 映射 → X360 兼容输出
 
 用法：
     py -3 tools/hil_test.py              # 自动检测并测试可用的硬件
@@ -22,6 +22,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from devices.xinput_api import XINPUT_STATE
+
 RESULTS = []
 
 
@@ -36,19 +38,6 @@ def report(name, ok, detail=""):
 #
 # XInput 手柄检测
 #
-
-
-class XINPUT_STATE(ctypes.Structure):
-    _fields_ = [
-        ("dwPacketNumber", wintypes.DWORD),
-        ("wButtons", wintypes.WORD),
-        ("bLeftTrigger", ctypes.c_ubyte),
-        ("bRightTrigger", ctypes.c_ubyte),
-        ("sThumbLX", ctypes.c_short),
-        ("sThumbLY", ctypes.c_short),
-        ("sThumbRX", ctypes.c_short),
-        ("sThumbRY", ctypes.c_short),
-    ]
 
 
 def xinput_slots():

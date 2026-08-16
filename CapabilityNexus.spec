@@ -9,6 +9,23 @@
 
 import os
 
+# 解析 vgamepad 的 ViGEmClient.dll（Windows 客户端库）
+try:
+    import vgamepad
+    import vgamepad.win  # noqa: F401
+    import vgamepad.win.vigem_client  # noqa: F401
+
+    _vg_dir = os.path.dirname(vgamepad.__file__)
+    _vigem_x64 = os.path.join(_vg_dir, "win", "vigem", "client", "x64", "ViGEmClient.dll")
+    _vigem_bin = []
+    if os.path.exists(_vigem_x64):
+        _vigem_bin = [(_vigem_x64, "vgamepad/win/vigem/client/x64")]
+    else:
+        print("[Spec] ViGEmClient.dll not found - vgamepad XInput backend may not work")
+except Exception as error:
+    _vigem_bin = []
+    print("[Spec] vgamepad not importable:", error)
+
 
 def _data_dir():
     data_dir = os.environ.get("CNX_DATA_DIR") or os.getcwd()
@@ -29,9 +46,23 @@ datas = [
 a = Analysis(
     ['tools/cnx_gui.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=_vigem_bin,
     datas=datas,
-    hiddenimports=['cryptography', 'cryptography.x509', 'cryptography.hazmat.backends.openssl'],
+    hiddenimports=[
+        'cryptography',
+        'cryptography.x509',
+        'cryptography.hazmat.backends.openssl',
+        'cryptography.hazmat.primitives.asymmetric.rsa',
+        'cryptography.hazmat.primitives.serialization',
+        'asn1crypto',
+        'asn1crypto.x509',
+        'certifi',
+        'vgamepad',
+        'vgamepad.win',
+        'vgamepad.win.vigem_client',
+        'vgamepad.win.vigem_commons',
+        'vgamepad.win.virtual_gamepad',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

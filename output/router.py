@@ -35,8 +35,8 @@ class OutputRouter:
         self.event_bus = event_bus
         self.virtual = virtual_device
 
-        # managed_instances: callable(id) -> instance（用户启用的输出设备）
-        self.managed_instances = managed_instances or (lambda _id: None)
+        # managed_instances: callable() -> instance dict（用户启用的输出设备）
+        self.managed_instances = managed_instances or (lambda: None)
 
         self.devices = real_devices or {}
 
@@ -101,11 +101,10 @@ class OutputRouter:
 
         for instance in instances.values():
             inst_type = getattr(instance, "output_type", None)
-
-            if inst_type is None:
+            if not inst_type:
                 inst_type = type(instance).__name__.lower()
-
-            if backend_type in inst_type or inst_type in backend_type:
+            # 精确匹配，避免 realxinputoutput 含 "xinput" 之类的子串误命中
+            if inst_type == backend_type:
                 return instance
 
         return None
