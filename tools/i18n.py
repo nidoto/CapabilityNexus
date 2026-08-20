@@ -200,6 +200,12 @@ STRINGS = {
         "svc_refresh": "刷新",
         "svc_device": "设备",
         "svc_capabilities": "能力",
+        "panel_phone_qr": "手机扫码（Web 服务）",
+        "svc_qr_no_lib": "未安装 qrcode 库（无法生成二维码）",
+        "svc_qr_install": "安装",
+        "svc_qr_installing": "正在安装 qrcode 库…",
+        "svc_qr_install_fail": "qrcode 库安装失败，请手动执行：py -3 -m pip install qrcode",
+        "close": "关闭",
     },
     "en": {
         "app_title": "CapabilityNexus",
@@ -397,6 +403,12 @@ STRINGS = {
         "svc_refresh": "Refresh",
         "svc_device": "Device",
         "svc_capabilities": "Capabilities",
+        "panel_phone_qr": "Phone QR (Web Service)",
+        "svc_qr_no_lib": "qrcode library not installed (cannot generate QR)",
+        "svc_qr_install": "Install",
+        "svc_qr_installing": "Installing qrcode library…",
+        "svc_qr_install_fail": "Failed to install qrcode. Run manually: py -3 -m pip install qrcode",
+        "close": "Close",
     },
 }
 

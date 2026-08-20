@@ -198,3 +198,53 @@ Everything below was done in the same development day and folded into V1.8.0.
   lock/unlock, map/menu), real reported capabilities and data-arrival latency.
 - Game test: Rush Rally 3 — went from "cannot finish" to finishing around 16th
   place with the phone-wheel setup.
+
+---
+
+## Device Identity layer (follow-up, still V1.8.0)
+
+Introduced a stable per-phone identity so configuration survives phone renames
+and is independent of any user account. The model is **Device → Profile**
+(device_id is the key; no user/account dimension is introduced).
+
+### Data shape
+
+- hello / config frames now carry `device_id` in addition to `name` /
+  `capabilities`. `name` is display-only.
+- Identity priority: `device_id` > `name`.
+
+### Phone web page
+
+- Generates a stable `device_id` (UUID) on first launch and persists it in
+  `localStorage` (`cnx_device_id`); re-sent on every reconnect.
+- If the phone connects without a `device_id`, the server generates one and
+  returns it via a `device_id` message so the page can persist it.
+
+### Server side (`PhoneFrameParser` / `PhoneProfileStore` / `WebService`)
+
+- `PhoneFrameParser.device` is now `{"device_id", "name", "capabilities"}`;
+  added `device_id` property.
+- `PhoneProfileStore` keys files by `<device_id>.json` (was
+  `<user>-<phone>.json`). `name` no longer affects the filename.
+- Legacy `<*>-<phone>.json` files are **not deleted**: on first connect the
+  store copies (migrates) a matching legacy file into the new
+  `<device_id>.json` by phone display name. No username/env dependency.
+
+### QR code for the Web service URL
+
+- New `tools/qrcode_utils.py` (pure-python `qrcode`, no Pillow) renders the
+  phone page URL(s) as PNG.
+- GUI: once the Web phone service is started, the **right-side panel**
+  (request column) **directly shows** a scannable QR per LAN IP (no button /
+  no popup) so the phone can open the page by scanning; it hides automatically
+  when the service stops.
+- Library-missing is handled honestly: if `qrcode` is not importable the QR
+  area shows a text hint + an **Install** button that runs
+  `py -3 -m pip install qrcode` in the background and auto-refreshes the QR
+  on success (no misleading dialog).
+
+### Tests
+
+- `tests/test_phone_profile.py` rewritten for `device_id` keying + legacy
+  migration; `tests/test_qrcode_utils.py` added (skips if `qrcode` absent).
+- Full suite: 111 passed, 1 skipped.

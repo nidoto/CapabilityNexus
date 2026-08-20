@@ -31,6 +31,9 @@ pynput==1.8.2
 # Phone browser sensor device (WebSocket server + page serving)
 websockets==17.0.1
 
+# QR code generation for the phone Web service URL (pure Python, no compiled deps)
+qrcode==8.2
+
 # Self-signed HTTPS cert generation for the phone service
 cryptography==50.0.0
 

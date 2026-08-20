@@ -25,10 +25,14 @@ from devices.connection import LineConnection
 
 
 class PhoneProfileStore:
-    """按手机名保存/读取手机配置（反转、方向盘最大角度、油门增益）。
+    """按手机身份保存/读取手机配置（反转、方向盘最大角度、油门增益）。
 
-    文件命名：<计算机用户名>-<手机名>.json，存放在 config/phone_profiles/ 下。
-    未来多手机接入时，每台手机一份配置。
+    身份主键是 device_id（手机端生成并持久化的稳定 UUID），与用户名/手机名
+    无关。文件名直接为 <device_id>.json，存放在 config/phone_profiles/ 下。
+    name 仅作为显示名称，不再参与文件命名。
+
+    兼容旧格式：旧文件名为 <计算机用户名>-<手机名>.json。旧文件不会被删除，
+    发现时通过 migrate_legacy() 复制为新格式（device_id.json）后继续可用。
     """
 
     def __init__(self, directory=None):
@@ -41,21 +45,37 @@ class PhoneProfileStore:
             directory = base
         self.directory = directory
 
-    def _sanitize(self, name):
+    def _sanitize(self, value):
         import re
 
-        return re.sub(r"[^\w\-]+", "_", name or "").strip("_") or "phone"
+        return re.sub(r"[^\w\-]+", "_", value or "").strip("_") or "phone"
 
-    def _path(self, device_name):
-        user = os.environ.get("USERNAME") or os.environ.get("USER") or "user"
-        safe = self._sanitize(device_name)
-        filename = f"{self._sanitize(user)}-{safe}.json"
+    def _path(self, device_id):
+        safe = self._sanitize(device_id)
+        filename = f"{safe}.json"
         return os.path.join(self.directory, filename)
 
-    def load(self, device_name):
+    def _find_legacy_by_name(self, name):
+        """按手机名查找旧格式文件：目录中任何以 -<sanitized_name>.json 结尾的文件。
+
+        不依赖用户名环境变量，纯按设备显示名匹配（只读兼容，不引入用户维度）。
+        返回找到的第一个旧文件路径，没有返回 None。
+        """
+        if not name or not os.path.isdir(self.directory):
+            return None
+        suffix = f"-{self._sanitize(name)}.json"
+        try:
+            for fn in os.listdir(self.directory):
+                if fn.endswith(suffix) and fn != suffix:
+                    return os.path.join(self.directory, fn)
+        except OSError:
+            return None
+        return None
+
+    def load(self, device_id):
         """读取手机配置，没有则返回空 dict。"""
         try:
-            path = self._path(device_name)
+            path = self._path(device_id)
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -65,13 +85,13 @@ class PhoneProfileStore:
             print("[PhoneProfile] Load failed:", error)
         return {}
 
-    def save(self, device_name, config):
+    def save(self, device_id, config):
         """保存手机配置（原子写入）。"""
-        if not device_name:
+        if not device_id:
             return False
         try:
             os.makedirs(self.directory, exist_ok=True)
-            path = self._path(device_name)
+            path = self._path(device_id)
             fd, temp_path = __import__("tempfile").mkstemp(
                 prefix=".cnx-", suffix=".tmp", dir=self.directory
             )
@@ -84,6 +104,31 @@ class PhoneProfileStore:
             return True
         except OSError as error:
             print("[PhoneProfile] Save failed:", error)
+            return False
+
+    def migrate_legacy(self, device_id, name):
+        """将旧格式 <*>-<手机名>.json 复制为新格式 <device_id>.json。
+
+        按手机显示名（非用户名）查找旧文件，旧文件不会被删除（仅复制）。
+        返回是否执行了复制。若新格式文件已存在则跳过（不覆盖已有身份配置）。
+        """
+        if not device_id or not name:
+            return False
+        new_path = self._path(device_id)
+        if os.path.exists(new_path):
+            return False
+        legacy = self._find_legacy_by_name(name)
+        if legacy is None:
+            return False
+        try:
+            import shutil
+
+            os.makedirs(self.directory, exist_ok=True)
+            shutil.copyfile(legacy, new_path)
+            print(f"[PhoneProfile] Migrated legacy {legacy} -> {new_path}")
+            return True
+        except OSError as error:
+            print("[PhoneProfile] Migration failed:", error)
             return False
 
     def list_profiles(self):
@@ -302,12 +347,20 @@ class PhoneFrameParser:
 
     传感器轴（roll/pitch/yaw/accel）→ phone.* 能力
     触屏按钮 / 油门 / 刹车 → phone.* 能力
+
+    设备身份：hello 帧携带 {device_id, name, capabilities}。
+    device_id 是主键（手机端生成并持久化），name 仅作显示。
+    识别优先级：device_id > name。
     """
 
     def __init__(self, event_bus):
         self.event_bus = event_bus
         self._last_buttons = {}
-        self.device = None  # {"name", "capabilities"}
+        self.device = None  # {"device_id", "name", "capabilities"}
+
+    @property
+    def device_id(self):
+        return (self.device or {}).get("device_id") or ""
 
     @property
     def device_name(self):
@@ -329,6 +382,7 @@ class PhoneFrameParser:
 
         if frame_type == "hello":
             self.device = {
+                "device_id": data.get("device_id") or "",
                 "name": data.get("name") or "Phone",
                 "capabilities": data.get("capabilities") or [],
             }

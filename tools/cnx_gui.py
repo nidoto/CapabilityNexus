@@ -594,6 +594,16 @@ class CapabilityNexusGUI:
 
         self._build_request_monitor(box)
 
+        # 手机 Web 服务二维码：放在右侧区域，服务启动时直接显示，停止时隐藏
+        qr_box = ttk.LabelFrame(box, text=self.t("panel_phone_qr"))
+        qr_box.pack(fill=tk.X, padx=6, pady=(4, 6))
+        qr_frame = ttk.Frame(qr_box)
+        qr_frame.pack(fill=tk.X, padx=6, pady=4)
+        qr_frame.grid_remove()  # 默认隐藏，运行时显示
+        self._web_qr_frame = qr_frame
+        self._qrcode_missing = False
+        self._qrcode_installing = False
+
     def _refresh_process_list(self):
         """枚举进程并回填下拉框（ctypes 极快，同步执行）"""
         from devices.process_list import list_processes
@@ -1293,6 +1303,9 @@ class CapabilityNexusGUI:
 
             self._web_ip_var.set("\n".join(lines) if lines else "")
 
+            # 内嵌二维码：服务运行时直接显示，停止时隐藏
+            self._render_phone_qr(info if running else None)
+
         def toggle_web():
             if self._web_service.is_running():
                 ok, msg = self._web_service.stop()
@@ -1371,6 +1384,123 @@ class CapabilityNexusGUI:
         self._refresh_drivers = refresh_drivers
         refresh_web()
         refresh_drivers()
+
+    def _render_phone_qr(self, info):
+        """在 Web 服务面板内嵌显示二维码（服务运行时）。停止时隐藏。
+
+        仅当 qrcode 库可用时渲染图片；库缺失时显示提示与"安装"按钮，
+        用户可一键安装后自动刷新。
+        """
+        frame = getattr(self, "_web_qr_frame", None)
+        if frame is None:
+            return
+
+        # 清空旧内容（含旧 PhotoImage 引用，避免泄漏）
+        for child in frame.winfo_children():
+            child.destroy()
+        frame.photo_refs = []  # 持有 PhotoImage 引用，防止被 GC 后不显示
+
+        if not info or not info.get("page_urls"):
+            frame.grid_remove()
+            return
+
+        try:
+            from tools import qrcode_utils
+        except ImportError:
+            qrcode_utils = None
+
+        # 库缺失：显示提示 + 一键安装按钮（不再误报为其他错误）
+        if qrcode_utils is None or self._qrcode_missing:
+            warn = ttk.Frame(frame)
+            warn.pack(side=tk.LEFT, padx=6, pady=2)
+            ttk.Label(warn, text=self.t("svc_qr_no_lib"),
+                      foreground="#f87171", font=("Segoe UI", 9)).pack()
+            install_btn = ttk.Button(
+                warn, text=self.t("svc_qr_install"),
+                command=lambda: self._install_qrcode_lib(),
+            )
+            install_btn.pack(pady=(4, 0))
+            frame.grid()  # 显示
+            return
+
+        for url in info["page_urls"]:
+            item = ttk.Frame(frame)
+            item.pack(side=tk.LEFT, padx=6, pady=2)
+            try:
+                png = qrcode_utils.generate_qr_png(url)
+                try:
+                    photo = tk.PhotoImage(file=png)
+                    frame.photo_refs.append(photo)  # 持有引用
+                    ttk.Label(item, image=photo).pack()
+                finally:
+                    try:
+                        os.remove(png)
+                    except OSError:
+                        pass
+            except ImportError:
+                # 运行环境确实缺少 qrcode 库（如未装依赖）
+                self._qrcode_missing = True
+                self._render_phone_qr(info)  # 切换到"提示+安装"视图
+                return
+            except Exception as error:
+                ttk.Label(item, text=f"QR 失败: {error}",
+                          foreground="#f87171", font=("Segoe UI", 9)).pack()
+            ttk.Label(item, text=url, font=("Consolas", 8),
+                      foreground="#94a3b8").pack(pady=(2, 0))
+
+        frame.grid()  # 显示
+
+    def _install_qrcode_lib(self):
+        """后台 pip 安装 qrcode，完成后刷新二维码区域。"""
+        if getattr(self, "_qrcode_installing", False):
+            return
+        self._qrcode_installing = True
+        self._qrcode_missing = True
+
+        # 安装中提示
+        frame = getattr(self, "_web_qr_frame", None)
+        if frame is not None:
+            for child in frame.winfo_children():
+                child.destroy()
+            ttk.Label(frame, text=self.t("svc_qr_installing"),
+                      foreground="#fbbf24", font=("Segoe UI", 9)).pack(padx=6, pady=2)
+            frame.grid()
+
+        import subprocess
+        import sys
+        import threading
+
+        def run():
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "qrcode"],
+                    capture_output=True, text=True, timeout=300,
+                )
+                ok = proc.returncode == 0
+                out = (proc.stdout or proc.stderr or "").strip()
+            except Exception as error:
+                ok = False
+                out = str(error)
+            finally:
+                self._qrcode_installing = False
+
+            if ok:
+                # 安装成功后强制重渲染（清空缺失标记）
+                self._qrcode_missing = False
+                # 让 tools 包重新可发现 qrcode_utils（模块本身一直可导入）
+            self.root.after(0, lambda: self._after_qrcode_install(ok, out))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _after_qrcode_install(self, ok, out):
+        if not ok:
+            messagebox.showwarning(
+                self.t("menu_services"),
+                self.t("svc_qr_install_fail") + "\n\n" + out[-500:],
+            )
+        # 重新渲染：成功则显示二维码，失败则回到"提示+安装"
+        info = self._web_service.info() if getattr(self, "_web_service", None) else None
+        self._render_phone_qr(info if (info and info.get("running")) else None)
 
     def _ensure_phone_vibration_sub(self):
         """建立游戏震动 → 手机转发订阅（需引擎已启动，幂等）。"""

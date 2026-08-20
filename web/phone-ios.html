@@ -778,6 +778,9 @@ function connect() {
       var msg = JSON.parse(ev.data);
       if (msg.t === "config" && msg.config) {
         applySavedConfig(msg.config);
+      } else if (msg.t === "device_id" && msg.device_id) {
+        // 服务端分配的 device_id：持久化到本机，下次自动携带
+        saveDeviceId(msg.device_id);
       } else if (msg.t === "vibrate" && navigator.vibrate) {
         // 游戏请求震动（HTTPS secure context 下可用）
         navigator.vibrate(msg.duration_ms || 80);
@@ -1415,6 +1418,27 @@ function deviceName() {
   return "Phone " + model;
 }
 
+function loadDeviceId() {
+  try {
+    var id = localStorage.getItem("cnx_device_id");
+    if (id) return id;
+    // 首次：生成本机稳定 device_id 并持久化
+    var gen = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : "dev-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem("cnx_device_id", gen);
+    return gen;
+  } catch (e) {
+    return "";
+  }
+}
+
+function saveDeviceId(id) {
+  try {
+    if (id) localStorage.setItem("cnx_device_id", id);
+  } catch (e) {}
+}
+
 function sendHello() {
   if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
   var caps = ["gyroscope", "accelerometer", "buttons", "dpad", "gas", "brake"];
@@ -1422,6 +1446,7 @@ function sendHello() {
   if (navigator.geolocation) caps.push("gps");
   var payload = {
     t: "hello",
+    device_id: loadDeviceId(),
     name: deviceName(),
     capabilities: caps
   };

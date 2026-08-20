@@ -8,6 +8,7 @@ WebService 独立于引擎运行，方便用户按需开启/关闭手机连接�
 import socket
 import threading
 import time
+import uuid
 from collections import deque
 
 
@@ -118,7 +119,7 @@ class WebService:
                 self._ssl = None
 
         def wrapped_callback(message, websocket=None):
-            # 解析 hello 记录设备名；sensors/buttons 帧只更新设备存在，
+            # 解析 hello 记录设备身份；sensors/buttons 帧只更新设备存在，
             # 实际能力数据由外部 callback 转发（带 event_bus 的 parser）
             try:
                 import json as _json
@@ -129,22 +130,39 @@ class WebService:
                 frame_type = data.get("t", data.get("type", "sensors"))
                 if frame_type == "hello":
                     self._parser.parse(message)
-                    # 连接后把已保存的配置回发给手机
-                    saved = self._profile_store.load(self._parser.device_name)
-                    if saved and websocket is not None:
+                    # 身份主键：device_id（手机端生成并持久化）。
+                    # 手机未带 device_id 时由服务端生成并回传，让其持久化。
+                    dev_id = self._parser.device_id or str(uuid.uuid4())
+                    if self._parser.device:
+                        self._parser.device["device_id"] = dev_id
+                    # 兼容旧格式：按手机名迁移 <用户>-<手机名>.json
+                    self._profile_store.migrate_legacy(dev_id, self._parser.device_name)
+                    saved = self._profile_store.load(dev_id)
+                    if websocket is not None:
                         try:
-                            server.send_json(websocket, {
-                                "t": "config",
-                                "config": saved,
-                            })
+                            if not data.get("device_id"):
+                                # 让手机记住它被分配的 device_id（localStorage）
+                                server.send_json(websocket, {
+                                    "t": "device_id",
+                                    "device_id": dev_id,
+                                })
+                            if saved:
+                                server.send_json(websocket, {
+                                    "t": "config",
+                                    "config": saved,
+                                })
                         except Exception as error:
                             print("[WebService] Config reply failed:", error)
                 elif frame_type == "config":
                     # 手机保存配置：反转/方向盘最大角度/油门增益
                     self._parser.device = self._parser.device or {"name": "Phone"}
-                    name = self._parser.device_name
+                    dev_id = self._parser.device_id or data.get("device_id")
+                    if not dev_id:
+                        dev_id = str(uuid.uuid4())
+                        if self._parser.device:
+                            self._parser.device["device_id"] = dev_id
                     cfg = data.get("config") or {}
-                    self._profile_store.save(name, cfg)
+                    self._profile_store.save(dev_id, cfg)
 
                 # 手机真实数据（hello/传感器/按钮）算"活跃连接"；
                 # 同时用服务端到达时间戳测平均帧间隔（近似平均延时，不增加任何传输数据）
@@ -186,6 +204,13 @@ class WebService:
         with self._lock:
             if self._parser is not None:
                 return self._parser.device_name
+        return ""
+
+    @property
+    def device_id(self):
+        with self._lock:
+            if self._parser is not None:
+                return self._parser.device_id
         return ""
 
     @property
