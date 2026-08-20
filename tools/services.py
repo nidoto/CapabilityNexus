@@ -71,22 +71,63 @@ def best_local_ip():
     return ips[0]
 
 
+class DeviceSession:
+    """单个手机设备的连接生命周期状态（按 device_id 主键）。
+
+    状态机：
+      OFFLINE      - 服务未运行，或设备从未连接 / 已主动停止
+      CONNECTED    - WebSocket 已连且正在收发数据
+      RECONNECTING - WebSocket 已断开，但设备对象保留（profile / 已有
+                     解析状态不删除），等待手机按退避策略自动重连
+
+    重连成功后（device_id 校验通过）恢复同一 session，不创建新设备。
+    """
+
+    STATUS_OFFLINE = "OFFLINE"
+    STATUS_CONNECTED = "CONNECTED"
+    STATUS_RECONNECTING = "RECONNECTING"
+
+    def __init__(self, device_id, name="Phone", capabilities=None):
+        self.device_id = device_id
+        self.name = name
+        self.capabilities = list(capabilities or [])
+        self.status = self.STATUS_OFFLINE
+        self.last_seen = None
+        self.reconnect_attempts = 0
+
+    def to_dict(self):
+        return {
+            "device_id": self.device_id,
+            "status": self.status,
+            "last_seen": self.last_seen,
+            "reconnect_attempts": self.reconnect_attempts,
+            "name": self.name,
+            "capabilities": list(self.capabilities),
+        }
+
+
 class WebService:
     """Web 手机服务：独立于引擎的 WebSocket 服务器。
 
     use_https=True 时启用 HTTPS（自签证书）：手机访问 https://IP:port 需要
     在浏览器点"继续访问"，但可获得完整能力（陀螺仪等 secure context API）。
     use_https=False 时仅 HTTP：手机直接访问，但陀螺仪不可用（触屏模式）。
+
+    连接生命周期见 DeviceSession：CONNECTED / RECONNECTING / OFFLINE。
+    WebSocket 断开时保留设备对象（device_id / profile / parser 状态），
+    重连时按 device_id 恢复同一 session，不创建新设备。
     """
 
     def __init__(self, port=8765, callback=None, use_https=True, on_client_change=None):
         self.port = port
         self.callback = callback
         self.use_https = use_https
-        self._on_client_change = on_client_change  # 手机连接/断开回调(计数)
+        self._on_client_change = on_client_change  # 手机连接/断开回调(计数)，给 GUI
         self._server = None
         self._lock = threading.Lock()
         self._parser = None  # PhoneFrameParser，用于记录连接的手机设备
+        self._session = None  # DeviceSession，按 device_id 保留设备对象
+        self._client_count = 0
         self._ssl = None
         self._last_data_ts = None  # 最近一次收到手机真实数据的时间戳
         self._last_frame_ts = None  # 上一帧真实数据到达的时间戳（算帧间隔）
@@ -99,6 +140,43 @@ class WebService:
     @property
     def ws_scheme(self):
         return "wss" if self.scheme == "https" else "ws"
+
+    def _on_client_count_changed(self, count):
+        """WebSocket 客户端数量变化（连接或断开）。
+
+        断开（count 归 0）且当前为 CONNECTED 时，进入 RECONNECTING：
+        保留设备对象（device_id / profile / parser），等待手机重连。
+        """
+        with self._lock:
+            self._client_count = count
+            if (count == 0 and self._session is not None
+                    and self._session.status == DeviceSession.STATUS_CONNECTED):
+                self._session.status = DeviceSession.STATUS_RECONNECTING
+                self._session.reconnect_attempts += 1
+                # 注意：不清除 self._parser / session，设备对象保留
+        # 通知 GUI 刷新
+        cb = self._on_client_change
+        if cb is not None:
+            try:
+                cb(count)
+            except Exception as error:
+                print("[WebService] on_client_change callback failed:", error)
+
+    @property
+    def phone_status(self):
+        """返回当前手机连接状态：CONNECTED / RECONNECTING / OFFLINE。"""
+        with self._lock:
+            if self._server is None or self._session is None:
+                return DeviceSession.STATUS_OFFLINE
+            return self._session.status
+
+    @property
+    def phone_session(self):
+        """返回当前设备 session 快照 dict（含 device_id/status/last_seen/reconnect_attempts）。"""
+        with self._lock:
+            if self._session is None:
+                return None
+            return self._session.to_dict()
 
     def _make_server(self):
         from devices.websocket_connection import WebSocketServerConnection
@@ -135,6 +213,19 @@ class WebService:
                     dev_id = self._parser.device_id or str(uuid.uuid4())
                     if self._parser.device:
                         self._parser.device["device_id"] = dev_id
+                    # 恢复已有 session（device_id 校验通过则不创建新设备）
+                    with self._lock:
+                        if self._session is None or self._session.device_id != dev_id:
+                            self._session = DeviceSession(
+                                dev_id,
+                                self._parser.device_name,
+                                self._parser.device_capabilities,
+                            )
+                        self._session.status = DeviceSession.STATUS_CONNECTED
+                        self._session.last_seen = time.time()
+                        self._session.reconnect_attempts = 0
+                        self._session.name = self._parser.device_name
+                        self._session.capabilities = self._parser.device_capabilities
                     # 兼容旧格式：按手机名迁移 <用户>-<手机名>.json
                     self._profile_store.migrate_legacy(dev_id, self._parser.device_name)
                     saved = self._profile_store.load(dev_id)
@@ -168,6 +259,9 @@ class WebService:
                 # 同时用服务端到达时间戳测平均帧间隔（近似平均延时，不增加任何传输数据）
                 if frame_type in ("hello", "sensors", "sensor", "buttons", "config"):
                     now = time.time()
+                    with self._lock:
+                        if self._session is not None:
+                            self._session.last_seen = now
                     if self._last_frame_ts is not None:
                         interval_ms = (now - self._last_frame_ts) * 1000
                         # 过滤异常间隔（<1ms 或 >2s），避免重连/暂停污染平均值
@@ -185,7 +279,7 @@ class WebService:
             host="0.0.0.0",
             port=self.port,
             ssl_context=self._ssl,
-            on_client_change=self._on_client_change,
+            on_client_change=self._on_client_count_changed,
         )
         self._server = server
         return server
@@ -273,6 +367,7 @@ class WebService:
             server = self._server
             self._server = None
             self._parser = None
+            self._session = None  # 主动停止：设备对象移除，状态转 OFFLINE
             self._data_intervals.clear()
             try:
                 server.close()
@@ -286,6 +381,7 @@ class WebService:
         ips = get_local_ips()
         scheme = self.scheme
         ws_scheme = self.ws_scheme
+        session = self.phone_session
         return {
             "running": running,
             "port": self.port,
@@ -294,6 +390,8 @@ class WebService:
             "scheme": scheme,
             "page_urls": [f"{scheme}://{ip}:{self.port}/" for ip in ips],
             "ws_urls": [f"{ws_scheme}://{ip}:{self.port}/ws" for ip in ips],
+            "phone_status": self.phone_status,
+            "phone_session": session,
         }
 
     def send_to_phones(self, message):
@@ -340,3 +438,5 @@ class WebService:
                 except Exception:
                     pass
                 self._server = None
+                self._parser = None
+                self._session = None

@@ -248,3 +248,56 @@ and is independent of any user account. The model is **Device → Profile**
 - `tests/test_phone_profile.py` rewritten for `device_id` keying + legacy
   migration; `tests/test_qrcode_utils.py` added (skips if `qrcode` absent).
 - Full suite: 111 passed, 1 skipped.
+
+---
+
+## Device reconnect lifecycle (Phase 2, still V1.8.0)
+
+Improves the phone **connection lifecycle** only — mapping / xinput / Solution
+untouched. Goal: don't drop the device object on a transient WebSocket drop,
+and let the phone reattach to the same session.
+
+### DeviceSession state model (server side)
+
+- New `tools/services.py::DeviceSession` keyed by `device_id` with:
+  `device_id`, `status`, `last_seen`, `reconnect_attempts` (+ name/caps).
+- Status enum: `CONNECTED` / `RECONNECTING` / `OFFLINE`.
+- `WebService` keeps `self._session`. `phone_status` / `phone_session`
+  expose the current state; `info()` now includes `phone_status` /
+  `phone_session`.
+
+### Don't delete on disconnect
+
+- On WebSocket client drop (`_on_client_count_changed(0)`) the session goes
+  `CONNECTED → RECONNECTING` and `reconnect_attempts += 1`. `self._parser`
+  and the session (device_id / profile / pipeline state) are **kept** — no
+  new device, node not removed.
+- Service stop / close → `OFFLINE` and session cleared (intentional stop).
+
+### Reconnect restore
+
+- On a new `hello` with a `device_id` that matches the existing session,
+  `WebService` **restores** the same session (`CONNECTED`, `reconnect_attempts`
+  reset) instead of creating a new device. Only a different `device_id` starts
+  a fresh session.
+
+### Phone web page (android + ios)
+
+- Auto-reconnect backoff is now escalating **1s → 2s → 5s** (loop), reset on
+  successful (re)connect.
+- A connection-status pill shows **Connected / Reconnecting / Offline**
+  (`#connState` element + `setConnState()`), updated on open/close.
+
+### GUI
+
+- `_phone_connection_info` returns `status` (CONNECTED/RECONNECTING/OFFLINE).
+- Services panel phone line shows the status word; device-tree phone node is
+  kept during `RECONNECTING` (labeled "重连中 / Reconnecting"), removed only
+  at `OFFLINE`. State-change log distinguishes reconnecting vs offline.
+- i18n: `phone_status_connected` / `phone_status_reconnecting` (zh + en).
+
+### Tests
+
+- `tests/test_phone_reconnect.py`: DeviceSession state machine, WebService
+  RECONNECTING transition (session preserved), backoff schedule (1/2/5s).
+- Full suite: 117 passed.

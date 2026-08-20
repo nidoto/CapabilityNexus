@@ -1281,21 +1281,24 @@ class CapabilityNexusGUI:
 
                 # 手机连接状态 + 能力 + 平均延时（需最近有真实数据才算已连接）
                 phone_info = self._phone_connection_info()
-                connected = phone_info["connected"]
-                if connected:
+                status = phone_info["status"]
+                if status == "OFFLINE":
+                    lines.append(f"{self.t('svc_device')}: {self.t('tree_disconnected')}")
+                else:
                     dev_name = phone_info["name"] or "Phone"
-                    status_txt = self.t("tree_connected")
-                    di = phone_info["data_interval_ms"]
-                    if di is not None:
-                        status_txt += f"  {self.t('tree_latency')} {di}ms"
+                    if status == "CONNECTED":
+                        status_txt = self.t("phone_status_connected")
+                        di = phone_info["data_interval_ms"]
+                        if di is not None:
+                            status_txt += f"  {self.t('tree_latency')} {di}ms"
+                    else:  # RECONNECTING
+                        status_txt = self.t("phone_status_reconnecting")
                     lines.append(f"{self.t('svc_device')}: {dev_name}  {status_txt}")
                     dev_caps = phone_info["capabilities"]
                     if dev_caps:
                         lines.append(
                             f"{self.t('svc_capabilities')}: {', '.join(dev_caps)}"
                         )
-                else:
-                    lines.append(f"{self.t('svc_device')}: {self.t('tree_disconnected')}")
             else:
                 # 未运行时也提示可用的本机 IP
                 best = info.get("best_ip") or ""
@@ -1594,14 +1597,19 @@ class CapabilityNexusGUI:
             pass
 
     def _phone_connection_info(self):
-        """返回当前手机连接信息：{connected, name, capabilities, data_interval_ms}。
+        """返回当前手机连接信息：{connected, status, name, capabilities, data_interval_ms}。
 
-        手机由 Web 服务（WebService）托管。只有 Web 服务有已连接客户端、
-        且最近 3 秒内确实收到手机数据（hello/传感器/按钮）才算"已连接"——
-        手机页面在后台挂起时只保持 WebSocket 不传数据，不视为连接。
+        手机由 Web 服务（WebService）托管，生命周期状态来自 web.phone_status：
+          CONNECTED    - 活跃连接（WebSocket 在线且近期有数据）
+          RECONNECTING - WebSocket 断开但设备对象保留，等待手机自动重连
+          OFFLINE      - 服务未运行 / 无设备
+
+        connected（活跃）要求 status==CONNECTED 且最近 3 秒内有真实数据；
+        RECONNECTING 时不视为"活跃"，但设备节点保留不删除。
         """
         info = {
             "connected": False,
+            "status": "OFFLINE",
             "name": "",
             "capabilities": [],
             "data_interval_ms": None,
@@ -1610,28 +1618,39 @@ class CapabilityNexusGUI:
             import time as _time
 
             web = getattr(self, "_web_service", None)
-            if web is not None and web.is_phone_connected:
+            if web is None:
+                return info
+            status = web.phone_status
+            info["status"] = status
+            session = web.phone_session or {}
+            info["name"] = session.get("name") or ""
+            info["capabilities"] = session.get("capabilities") or []
+            if status == "CONNECTED":
                 last = web.last_data_ts
                 if last is not None and (_time.time() - last) < 3.0:
                     info["connected"] = True
                     info["data_interval_ms"] = web.data_interval_ms
-                    parser = getattr(web, "_parser", None)
-                    if parser is not None:
-                        info["name"] = parser.device_name
-                        info["capabilities"] = parser.device_capabilities
         except Exception:
             pass
         return info
 
     def _check_phone_state_change(self):
-        """轮询手机连接状态：变化时提示并刷新设备树（掉线自动移除手机节点）。"""
+        """轮询手机连接状态：变化时提示并刷新设备树。
+
+        状态来自 web.phone_status：
+          CONNECTED    - 活跃连接
+          RECONNECTING - WebSocket 断开，设备对象保留，等待重连（不删除节点）
+          OFFLINE      - 服务未运行 / 已停止
+        """
         try:
             info = self._phone_connection_info()
             was = getattr(self, "_phone_was_connected", False)
+            status = info["status"]
             # 数据到达间隔变化（每 5ms 档）也触发刷新，让设备树实时更新平均延时
             di = info["data_interval_ms"]
             di_key = int(di / 5) if di is not None else None
-            key = (info["connected"], info["name"], tuple(info["capabilities"]), di_key)
+            key = (status, info["connected"], info["name"],
+                   tuple(info["capabilities"]), di_key)
             if key == getattr(self, "_phone_state_key", None):
                 # 状态未变时，周期性向日志文件写心跳（约每 2 秒），记录持续传输情况
                 self._hb = getattr(self, "_hb", 0) + 1
@@ -1642,15 +1661,18 @@ class CapabilityNexusGUI:
                 return
             self._phone_state_key = key
 
-            if info["connected"] and not was:
+            if status == "CONNECTED" and not was:
                 self.log("✅ 手机已连接")
-            elif not info["connected"] and was:
-                self.log("⚠️ 手机已断开连接（已从设备树移除）")
+            elif status == "RECONNECTING":
+                # WebSocket 断开：保留设备对象，等待手机自动重连
+                self.log("🔄 手机连接断开，等待重连（设备配置已保留）…")
+            elif status == "OFFLINE" and was:
+                self.log("⚠️ 手机已离线（OFFLINE）")
             self._phone_was_connected = info["connected"]
 
             di_text = f"{di}ms" if di is not None else "-"
             self.log(
-                f"[手机] 已连接={info['connected']} "
+                f"[手机] 状态={status} 活跃={info['connected']} "
                 f"名称={info['name'] or '-'} "
                 f"能力={', '.join(info['capabilities']) or '-'} "
                 f"平均延时={di_text}"
@@ -1777,24 +1799,31 @@ class CapabilityNexusGUI:
             self._insert_device_node(device, device.get("name", "?"), "", [],
                                      packages, mapped, mapped_target)
 
-        # 手机节点：WebService 连上才显示；掉线后由轮询检测移除（不显示离线节点）
+        # 手机节点：CONNECTED 或 RECONNECTING 都显示（重连期间保留节点，不删除）；
+        # 仅 OFFLINE 不显示。
         phone_info = self._phone_connection_info()
-        if phone_info["connected"]:
+        if phone_info["status"] in ("CONNECTED", "RECONNECTING"):
             phone_name = phone_info["name"] or "Phone"
-            phone_status = " " + self.t("tree_connected")
-            phone_caps = phone_info["capabilities"]
-            # 平均数据到达间隔 ≈ 平均延时（服务端纯计时，不增加任何传输数据）
-            data_ms = phone_info["data_interval_ms"]
-            latency_text = None
-            latency_level = None
-            if data_ms:
-                if data_ms <= 15:
-                    latency_level = "low"
-                elif data_ms <= 40:
-                    latency_level = "medium"
-                else:
-                    latency_level = "high"
-                latency_text = f"{self.t('tree_latency')}~{data_ms}ms(实测)"
+            if phone_info["status"] == "RECONNECTING":
+                phone_status = " " + self.t("phone_status_reconnecting")
+                phone_caps = phone_info["capabilities"]
+                latency_text = None
+                latency_level = None
+            else:
+                phone_status = " " + self.t("tree_connected")
+                phone_caps = phone_info["capabilities"]
+                # 平均数据到达间隔 ≈ 平均延时（服务端纯计时，不增加任何传输数据）
+                data_ms = phone_info["data_interval_ms"]
+                latency_text = None
+                latency_level = None
+                if data_ms:
+                    if data_ms <= 15:
+                        latency_level = "low"
+                    elif data_ms <= 40:
+                        latency_level = "medium"
+                    else:
+                        latency_level = "high"
+                    latency_text = f"{self.t('tree_latency')}~{data_ms}ms(实测)"
             phone_device = {
                 "name": phone_name,
                 "package": "phone",

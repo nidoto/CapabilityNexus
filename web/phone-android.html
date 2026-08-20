@@ -92,6 +92,20 @@
   .ok { color: #4ade80; }
   .err { color: #f87171; }
 
+  /* 连接状态指示：Connected / Reconnecting / Offline */
+  .conn-state {
+    display: inline-block;
+    margin: 0 14px 8px 14px;
+    padding: 3px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: bold;
+    border: 1px solid transparent;
+  }
+  .conn-connected { color: #4ade80; background: rgba(74,222,128,0.12); border-color: rgba(74,222,128,0.4); }
+  .conn-reconnecting { color: #fbbf24; background: rgba(251,191,36,0.12); border-color: rgba(251,191,36,0.4); }
+  .conn-offline { color: #94a3b8; background: rgba(148,163,184,0.12); border-color: rgba(148,163,184,0.4); }
+
   .sensor-box {
     margin: 12px 14px;
     padding: 12px;
@@ -406,6 +420,7 @@
 </div>
 
 <div class="status" id="status">未连接</div>
+<div class="conn-state conn-offline" id="connState">Offline</div>
 
 <!-- 方向锁定提醒条：全屏时锁不住方向就显示 -->
 <div id="orientHint" style="display:none;margin:8px 14px;padding:10px 12px;background:#7c2d12;color:#fed7aa;border-radius:8px;font-size:13px;">
@@ -806,7 +821,9 @@ function connect() {
   }
   ws.onopen = () => {
     connected = true;
+    reconnectAttempts = 0;  // 成功连接后重置退避计数
     setStatus("已连接: " + url, true);
+    setConnState("connected");
     sendHello();
     sendAll();
   };
@@ -826,6 +843,7 @@ function connect() {
   };
   ws.onclose = () => {
     connected = false;
+    setConnState("reconnecting");
     setStatus("已断开，自动重连中...", false);
     scheduleReconnect();
   };
@@ -834,13 +852,32 @@ function connect() {
   };
 }
 
+// 连接状态指示：connected / reconnecting / offline
+function setConnState(state) {
+  var el = document.getElementById("connState");
+  if (!el) return;
+  el.className = "conn-state " + (
+    state === "connected" ? "conn-connected" :
+    state === "reconnecting" ? "conn-reconnecting" : "conn-offline"
+  );
+  el.textContent = state === "connected" ? "Connected"
+                : state === "reconnecting" ? "Reconnecting" : "Offline";
+}
+
+// 自动重连：指数/分级退避，优先 1s → 2s → 5s（循环），连接成功后重置
+var reconnectAttempts = 0;
+var RECONNECT_BACKOFF = [1000, 2000, 5000];
+
 function scheduleReconnect() {
   if (!autoReconnect) return;
+  var delay = RECONNECT_BACKOFF[Math.min(reconnectAttempts, RECONNECT_BACKOFF.length - 1)];
+  reconnectAttempts++;
+  setConnState("reconnecting");
   setTimeout(function() {
     if (!connected) {
       try { connect(); } catch (e) {}
     }
-  }, 2000);
+  }, delay);
 }
 
 // 菜单：连接 / 断开
