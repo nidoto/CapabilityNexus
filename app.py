@@ -8,6 +8,7 @@ from core.processed_channel import ProcessedChannel
 from core.system_event import OutputEvent
 from core.stream import StreamData
 from core.capability import CapabilityEvent
+from core.capability_router import CapabilityRouter
 from core.status_monitor import StatusMonitor
 
 from packages.manager import PackageManager
@@ -19,6 +20,23 @@ from output.router import OutputRouter
 from output.request_handler import RequestHandler
 from protocols.umi_protocol import UMIParser
 from devices.device_manager import DeviceManager
+
+
+class CapabilityMappingAdapter:
+    """CapabilityEvent -> 旧 Mapping 管线的桥接 handler（保持 Mapping/X360 不变）。
+
+    Router 是通用能力层，本适配器同样不出现任何具体设备/能力的字面判断：
+    仅做结构转换——event.capability 字符串即 stream.id（与 V1.9 Phase 1 桥接
+    一致）。设备身份（device_id / timestamp）保留在 CapabilityEvent 中，供未来
+    订阅者使用，不影响 Mapping 的 source key。
+    """
+
+    def __init__(self, stream_receive):
+        # app 的 StreamData -> Channel 回调（负责进入未变的下游管线）
+        self._stream_receive = stream_receive
+
+    def handle(self, event):
+        self._stream_receive(StreamData(event.capability, event.value))
 
 
 class CapabilityNexusApp:
@@ -84,15 +102,17 @@ class CapabilityNexusApp:
 
         self.event_bus.subscribe(StreamData, stream_receive)
 
-        # CapabilityEvent -> Channel（Capability Runtime 桥接）
+        # CapabilityEvent -> CapabilityRouter（Capability Routing Layer）
         # 设备 Parser 现已统一输出 CapabilityEvent（标准格式，携带 device_id）。
-        # 为避免改动未变的下游管线（Mapping / X360 / StatusMonitor），这里把
-        # CapabilityEvent 转回现有 StreamData（capability 字符串即 stream.id），
-        # 复用同一 stream_receive 逻辑进入 Channel。device_id / timestamp 保留在
-        # CapabilityEvent 中，供未来订阅者做延迟补偿 / 多设备融合。
+        # 这里把总线上的 CapabilityEvent 转发进通用能力路由层；Router 不感知任何
+        # 具体设备/能力，只广播给所有 handler。当前唯一 handler 是
+        # CapabilityMappingAdapter（把事件转回 StreamData 喂给未变的 Mapping 管线）。
+        self.router = CapabilityRouter()
+        self.router.subscribe(CapabilityMappingAdapter(stream_receive).handle)
+
         def capability_receive(event):
-            stream = StreamData(event.capability, event.value)
-            stream_receive(stream)
+            # EventBus 上的 CapabilityEvent 进入路由层
+            self.router.publish(event)
 
         self.event_bus.subscribe(CapabilityEvent, capability_receive)
 

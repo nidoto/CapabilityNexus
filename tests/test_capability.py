@@ -12,6 +12,7 @@ import time
 
 from core.capability import CapabilityEvent
 from core.capability_registry import CapabilityRegistry
+from core.capability_router import CapabilityRouter
 from core.stream import StreamData
 from core.stream_adapter import StreamAdapter
 from core.channel import Channel
@@ -98,16 +99,6 @@ def _build_pipeline():
     outputs = []
     bus.subscribe(OutputEvent, lambda e: outputs.append(e))
 
-    def capability_receive(event):
-        # 与 app.py 一致的桥接：CapabilityEvent -> StreamData -> Channel
-        stream = StreamData(event.capability, event.value)
-        channel = adapter.convert(stream)
-        if channel is None:
-            return
-        bus.publish(channel)
-
-    bus.subscribe(CapabilityEvent, capability_receive)
-
     # StreamData -> Channel（既有设备路径，与 app.py 一致，用于对照兼容性）
     def stream_receive(stream):
         channel = adapter.convert(stream)
@@ -116,6 +107,19 @@ def _build_pipeline():
         bus.publish(channel)
 
     bus.subscribe(StreamData, stream_receive)
+
+    # CapabilityEvent -> CapabilityRouter -> MappingAdapter（与 app.py 一致）
+    # Router 为通用能力层；MappingAdapter 把事件结构转换为 StreamData 喂给
+    # 未变的 Mapping 管线。device_id / timestamp 保留在事件中。
+    from app import CapabilityMappingAdapter
+    router = CapabilityRouter()
+    router.subscribe(CapabilityMappingAdapter(stream_receive).handle)
+
+    # 通过路由层发布 CapabilityEvent（与 app.py 的 capability_receive 等价）
+    def capability_receive(event):
+        router.publish(event)
+
+    bus.subscribe(CapabilityEvent, capability_receive)
 
     # Channel -> ProcessedChannel（复刻 app.py 管线；此处处理器为空操作，
     # 关注点在于 CapabilityEvent 经桥接后能否进入未变的 Mapping -> X360 链路）

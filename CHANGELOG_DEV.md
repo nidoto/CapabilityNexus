@@ -231,3 +231,44 @@ Mapping / X360 / GUI / Device Identity / Reconnect。
 ### 备注
 - 手机端若此前在疯狂重连刷 `"connection handler failed"`，修复后建议先关闭手机
   网页再重连，避免日志刷屏（修复本身已消除 None.publish 根因）。
+
+---
+
+## 2026-08-21 — Capability Routing Layer（能力路由层，V1.9 Phase 2）
+
+提交：`feat: introduce capability routing layer`
+
+在 V1.9 Phase 1（CapabilityEvent 标准格式）之上增加**通用能力路由层**。系统仍
+只关心能力，不关心设备；未来 Provider/Consumer（VR / 骑行台 / 手柄 / 融合）以
+handler 接入，Router 无需改动。本阶段仅 Runtime Routing，不实现 UI / Solution。
+
+### 新增 core/capability_router.py
+- `CapabilityRouter`：`subscribe(handler)` / `unsubscribe(handler)` /
+  `publish(event)`。仅把 `CapabilityEvent` 广播给所有 handler。
+- **通用能力层约束**：不含任何具体设备/能力的字面判断（无 `if capability==`
+  / `if device==`）；不持有 Device，不依赖 Mapping / X360。
+- 单 handler 异常不影响其余 handler（与 EventBus 容错一致）。
+
+### app.py 修改
+- 新增 `CapabilityMappingAdapter`：`handle(event)` 把 `CapabilityEvent` 结构转换为
+  `StreamData(event.capability, event.value)`（event.capability 即 stream.id），
+  喂给未变的 `stream_receive → Channel → ... → MappingEngine`。保持 Mapping / X360
+  不变；同样不含设备/能力字面判断。
+- 管线改为：`CapabilityEvent`（总线）→ `capability_receive` → `CapabilityRouter`
+  → `CapabilityMappingAdapter` → `StreamData` → `Mapping`。Router 成为能力分发中枢，
+  未来消费者（Recorder / 融合）作为新 handler 接入即可。
+
+### 保持不破坏
+Device Identity / DeviceContext / Multi Device Runtime / Reconnect Lifecycle /
+PhoneProfileStore / MappingEngine / X360 Output 均未改动。
+
+### 测试
+- 新增 `tests/test_capability_router.py`：基础分发（收到同一事件）、多订阅（A/B 同收）、
+  device_id 路由前后保留、Mapping 回归（phone.roll → Router → Adapter → Mapping →
+  xbox.right_x 值与增益不变）、Router 能力无关性（trainer/vr/wheel 直接透传）。
+- 更新 `tests/test_capability.py`：回归管线改走 `CapabilityRouter + MappingAdapter`。
+- 通过：`test_capability.py`(5) / `test_phone.py`(6) / `test_pipeline.py`(2) /
+  `test_capability_router.py`(8) 共 21 passed。
+
+### 本 Phase 明确不做
+UI 能力列表 / 自动能力发现 / 能力数据库 / Graph 编辑器 / Solution System / 修改 X360。
