@@ -325,18 +325,18 @@ class WebService:
                 data = _json.loads(message)
                 frame_type = data.get("t", data.get("type", "sensors"))
 
-                # 解析 device_id（hello 帧从解析器取；其余帧从帧或 websocket 反查）
-                temp_parser = PhoneFrameParser(event_bus=None)
-                temp_parser.parse(message)
-                dev_id = temp_parser.device_id or data.get("device_id")
-
+                # 解析 device_id / 身份：
+                # - hello 帧：身份在帧体内直接取（与 PhoneFrameParser 解析结果一致），
+                #   不另建临时 parser（避免临时 parser 持 event_bus=None 而在
+                #   sensors/buttons 帧上误 emit 触发 None.publish）。
+                # - 非 hello 帧：从帧体 device_id 或当前 websocket 反查对应 context。
                 if frame_type == "hello":
-                    # 身份主键：device_id（手机端生成并持久化）。
+                    dev_id = data.get("device_id") or ""
+                    name = data.get("name") or "Phone"
+                    caps = data.get("capabilities") or []
                     # 手机未带 device_id 时由服务端生成并回传，让其持久化。
                     if not dev_id:
                         dev_id = str(uuid.uuid4())
-                    name = temp_parser.device_name
-                    caps = temp_parser.device_capabilities
                     # hello 流程：存在则恢复同一设备（不覆盖其他设备）；
                     # 不存在则创建。设备身份/配置以 device_id 为准。
                     ctx = self._get_or_create_context(dev_id, name, caps, websocket)
@@ -358,7 +358,8 @@ class WebService:
                                 })
                         except Exception as error:
                             print("[WebService] Config reply failed:", error)
-                    # 由该设备独立 parser 发布 hello 身份（保持按钮边沿状态隔离）
+                    # 由该设备独立 parser 发布 hello 身份（持有真实 event_bus，
+                    # 保持按钮边沿状态隔离）；event_bus 未注入前（引擎未启动）跳过。
                     if self.event_bus is not None:
                         ctx.parser.parse(message)
                 else:
@@ -376,6 +377,7 @@ class WebService:
                         self._profile_store.save(dev_id, cfg)
                         return
                     # sensors / buttons 等真实数据：只路由到对应设备的独立 parser
+                    # （ctx.parser 持有真实 event_bus，由 set_event_bus 注入）
                     if self.event_bus is not None:
                         ctx.parser.parse(message)
 

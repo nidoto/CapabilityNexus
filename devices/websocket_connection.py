@@ -409,6 +409,13 @@ class PhoneFrameParser:
     def _emit_sensors(self, data):
         from core.capability import CapabilityEvent
 
+        # 防御：event_bus 必须注入才能发布，避免低级 None.publish 异常。
+        if self.event_bus is None:
+            raise RuntimeError(
+                f"PhoneFrameParser({self.device_id}) has no event_bus; "
+                f"cannot emit CapabilityEvent"
+            )
+
         mapping = {
             "roll": "phone.roll",
             "pitch": "phone.pitch",
@@ -435,6 +442,13 @@ class PhoneFrameParser:
 
     def _emit_buttons(self, data):
         from core.capability import CapabilityEvent
+
+        # 防御：event_bus 必须注入才能发布，避免低级 None.publish 异常。
+        if self.event_bus is None:
+            raise RuntimeError(
+                f"PhoneFrameParser({self.device_id}) has no event_bus; "
+                f"cannot emit CapabilityEvent"
+            )
 
         buttons = data.get("buttons") or {}
         dpad = data.get("dpad") or {}

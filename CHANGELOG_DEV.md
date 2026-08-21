@@ -192,3 +192,42 @@ Mapping / X360 / GUI / Device Identity / Reconnect。
 ### 测试环境提示
 - 本沙箱下 `websockets` 模块在 pytest 采集期偶发卡死（守护线程交互），以
   `python -u` 直接运行脚本验证通过；建议在不受限环境跑全量 `pytest`。
+
+---
+
+## 2026-08-21 — Bugfix：V1.9 Phase 1 event_bus 注入遗漏
+
+### 现象
+手机发 sensors 帧时：`AttributeError: 'NoneType' object has no attribute 'publish'`
+（`PhoneFrameParser._emit_sensors`）。
+
+### 根因
+`WebService.wrapped_callback` 为解析 `device_id` 创建了一个临时
+`PhoneFrameParser(event_bus=None)`，并在**每个**帧（含 sensors/buttons）上调用
+`temp_parser.parse(message)`。对 sensors/buttons 帧，`temp_parser.parse` 会走到
+`_emit_sensors`/`_emit_buttons` 并发布到 `temp_parser.event_bus`（None）→ 崩溃。
+（原意图只是读身份，却因无条件调用 parse 误触发 emit。）
+
+### 修复
+- `tools/services.py` `wrapped_callback`：删除临时 `temp_parser`。hello 帧的身份
+  直接从帧体 `data` 读取（`device_id`/`name`/`capabilities`，与解析器结果一致）；
+  非 hello 帧通过 `_resolve_device_id` 反查。真实数据的 emit 只由持有真实
+  `event_bus` 的 `DeviceContext.parser` 完成（受 `self.event_bus is not None` 保护）。
+- `DeviceContext.parser`（即 V1.9 的 CapabilityEvent parser）仍由
+  `WebService.event_bus` 构造，`set_event_bus` 注入/同步，确保 V1.8 多设备
+  `DeviceContext` 与 V1.9 `CapabilityEvent` 共用同一 `event_bus`。
+- `devices/websocket_connection.py` `PhoneFrameParser._emit_sensors` /
+  `_emit_buttons`：新增防御——`event_bus is None` 时抛清晰
+  `RuntimeError("PhoneFrameParser(<id>) has no event_bus; cannot emit
+  CapabilityEvent")`，取代低级 `None.publish`。
+
+### 验证
+- `tests/test_capability.py` / `tests/test_phone.py` / `tests/test_phone_profile.py`
+  共 18 passed。
+- 运行时冒烟：模拟 WebService 设备上下文 parser 共享 `event_bus`，sensors 帧产出
+  `CapabilityEvent(device_id='dev-A', capability='phone.roll', value=1.23)`，
+  不再 `None.publish`；`event_bus=None` 的 parser 抛清晰 RuntimeError。
+
+### 备注
+- 手机端若此前在疯狂重连刷 `"connection handler failed"`，修复后建议先关闭手机
+  网页再重连，避免日志刷屏（修复本身已消除 None.publish 根因）。
