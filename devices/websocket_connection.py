@@ -407,7 +407,7 @@ class PhoneFrameParser:
             self._emit_buttons(data)
 
     def _emit_sensors(self, data):
-        from core.stream import StreamData
+        from core.capability import CapabilityEvent
 
         mapping = {
             "roll": "phone.roll",
@@ -426,10 +426,15 @@ class PhoneFrameParser:
                     value = float(data[key])
                 except (TypeError, ValueError):
                     continue
-                self.event_bus.publish(StreamData(capability, value))
+                # 统一标准格式：CapabilityEvent（携带 device_id，便于多设备溯源）
+                self.event_bus.publish(CapabilityEvent(
+                    device_id=self.device_id,
+                    capability=capability,
+                    value=value,
+                ))
 
     def _emit_buttons(self, data):
-        from core.stream import StreamData
+        from core.capability import CapabilityEvent
 
         buttons = data.get("buttons") or {}
         dpad = data.get("dpad") or {}
@@ -459,4 +464,9 @@ class PhoneFrameParser:
             if self._last_buttons.get(capability) == pressed:
                 continue
             self._last_buttons[capability] = pressed
-            self.event_bus.publish(StreamData(capability, 1.0 if pressed else 0.0))
+            # 统一标准格式：CapabilityEvent（携带 device_id，便于多设备溯源）
+            self.event_bus.publish(CapabilityEvent(
+                device_id=self.device_id,
+                capability=capability,
+                value=1.0 if pressed else 0.0,
+            ))

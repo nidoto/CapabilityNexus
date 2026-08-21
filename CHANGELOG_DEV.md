@@ -141,3 +141,54 @@ Profile** 模型（不引入任何用户/账号维度）。
   互不串扰。
 - 全量 `pytest`：待运行环境（本沙箱下 `websockets` 模块在 pytest 采集期偶发卡
   死，手动 `python -u` 验证通过）。
+
+---
+
+## 2026-08-21 — Capability Runtime Layer（能力运行时层，V1.9 Phase 1）
+
+提交：`feat: introduce capability runtime layer`
+
+在输入设备与 Mapping/X360 之间新增**稳定数据抽象层**。系统不再关心输入设备
+是什么，只关心它**提供什么能力**。未来手机 / 骑行台 / VR / 手柄 / 其它传感器
+统一转换成 `CapabilityEvent`。本阶段小步演进，不进入 Solution System，不修改
+Mapping / X360 / GUI / Device Identity / Reconnect。
+
+### 新增 `core/capability.py`
+- `CapabilityEvent` 数据类，字段：`device_id: str` / `capability: str` /
+  `value: Any` / `timestamp: float`（缺省 `time.time()`）。
+- `capability` 用**字符串命名**（非 enum）：未来第三方设备能力（如
+  `trainer.power` / `vr.head.yaw`）系统无需改动。
+- `device_id` 保留来源：多设备同名能力（如两台手机的 `phone.roll`）靠
+  `device_id` 区分，不混淆；`timestamp` 供未来延迟补偿 / 同步 / 融合。
+
+### 修改 PhoneFrameParser（devices/websocket_connection.py）
+- `_emit_sensors` / `_emit_buttons` 由发布 `StreamData` 改为发布
+  `CapabilityEvent(device_id=self.device_id, capability=..., value=...)`。
+- 仅改输出格式，**未大规模重构** parser；按钮边沿去重逻辑不变。
+
+### 运行时桥接（app.py，兼容层）
+- 新增 `capability_receive`：订阅 `CapabilityEvent` → 转 `StreamData(capability,
+  value)` → 复用既有 `stream_receive` 进入 `Channel`。下游 Mapping / X360 /
+  StatusMonitor / GUI 完全不变（仍消费 `StreamData`/`Channel`）。
+- `CapabilityEvent` 现已是手机数据进入引擎的标准格式；`device_id` / `timestamp`
+  保留在事件中供未来订阅者使用。
+
+### 兼容性验证
+- 手机二维码连接、手机控制 X360、mapping 工作：经桥接后 `phone.roll ->
+  xbox.right_x` 值与增益不变（`tests/test_capability.py` 端到端回归）。
+- 多设备隔离：`dev-a` / `dev-b` 的 `phone.roll` 在事件中 `device_id` 各自正确。
+
+### 测试
+- 新增 `tests/test_capability.py`：创建事件、多设备隔离、CapabilityEvent 经桥接
+  进入 Mapping→X360 链路（对照 `StreamData` 路径结果一致）。
+- 更新 `tests/test_phone.py`：解析器单测断言 `CapabilityEvent` 输出（含
+  `device_id`）；端到端用例使用持久 parser 实例以验证 `device_id` 跨帧携带。
+
+### 不影响 V1.8 Multi Device Runtime
+- 多设备隔离在 `WebService`/`DeviceContext` 层（`device_id` 主键、独立 parser、
+  断开只影响单设备）保持有效；本次仅把各设备 parser 的输出格式升级为
+  `CapabilityEvent`，桥接层对下游透明，Multi Device Runtime 行为不变。
+
+### 测试环境提示
+- 本沙箱下 `websockets` 模块在 pytest 采集期偶发卡死（守护线程交互），以
+  `python -u` 直接运行脚本验证通过；建议在不受限环境跑全量 `pytest`。

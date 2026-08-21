@@ -7,6 +7,7 @@ from core.channel import Channel
 from core.processed_channel import ProcessedChannel
 from core.system_event import OutputEvent
 from core.stream import StreamData
+from core.capability import CapabilityEvent
 from core.status_monitor import StatusMonitor
 
 from packages.manager import PackageManager
@@ -82,6 +83,18 @@ class CapabilityNexusApp:
             self.event_bus.publish(channel)
 
         self.event_bus.subscribe(StreamData, stream_receive)
+
+        # CapabilityEvent -> Channel（Capability Runtime 桥接）
+        # 设备 Parser 现已统一输出 CapabilityEvent（标准格式，携带 device_id）。
+        # 为避免改动未变的下游管线（Mapping / X360 / StatusMonitor），这里把
+        # CapabilityEvent 转回现有 StreamData（capability 字符串即 stream.id），
+        # 复用同一 stream_receive 逻辑进入 Channel。device_id / timestamp 保留在
+        # CapabilityEvent 中，供未来订阅者做延迟补偿 / 多设备融合。
+        def capability_receive(event):
+            stream = StreamData(event.capability, event.value)
+            stream_receive(stream)
+
+        self.event_bus.subscribe(CapabilityEvent, capability_receive)
 
         # Channel -> ProcessedChannel
         def channel_receive(channel):
