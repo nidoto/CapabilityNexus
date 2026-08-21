@@ -165,6 +165,32 @@ class CapabilityNexusApp:
         self.mapping_engine = MappingEngine(self.event_bus)
         self.mapping_engine.load_mappings(self._profile_data.get("mappings", {}))
 
+        # Solution 体系接线（Phase 8-13 的运行时装配，Phase 14 注入 GUI）。
+        # 复用本 app 已有的 mapping_engine / event_bus，不新建引擎实例。
+        self.solution_workflow, self.solution_controller = self._build_solution_stack()
+
+    def _build_solution_stack(self):
+        """装配 Solution 体系（Graph/Manager/Runtime/Workflow/Controller）。
+
+        复用本 app 已有的 mapping_engine（与既有 MappingEngine 一致），
+        不新建引擎实例；供 GUI 注入 SolutionPanel 使用（Phase 14 最小接线）。
+
+        不修改 CapabilityGraph / AutoRouter / SolutionWorkflow / MappingEngine。
+        """
+        from core.capability_graph import CapabilityGraph
+        from core.solution_manager import SolutionManager
+        from core.solution_runtime import SolutionRuntime
+        from core.auto_router import AutoRouter
+        from core.solution_workflow import SolutionWorkflow
+        from core.solution_ui_model import SolutionController
+
+        graph = CapabilityGraph()
+        manager = SolutionManager()
+        runtime = SolutionRuntime(self.mapping_engine, manager)
+        workflow = SolutionWorkflow(graph, AutoRouter(), manager, runtime)
+        controller = SolutionController(workflow)
+        return workflow, controller
+
     def _load_game_processors(self):
         """加载当前激活游戏配置中的处理器覆盖。"""
         processors = self._profile_data.get("processors")

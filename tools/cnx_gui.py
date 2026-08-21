@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools import config_io
 from tools.i18n import I18n
+from tools.solution_gui import SolutionPanel
 
 
 class CapabilityNexusGUI:
@@ -32,6 +33,7 @@ class CapabilityNexusGUI:
         self.root = root
         self.i18n = I18n(config_io.load_client_language("zh"))
         self.app = None
+        self.solution_panel = None
 
         self.root.title(self.t("app_title"))
         self.root.geometry("1760x1060")
@@ -134,6 +136,7 @@ class CapabilityNexusGUI:
         self._refresh_live_values()
         self._render_request_monitor()
         self._refresh_runtime_dashboard()
+        self._refresh_solution_panel()
 
         # 服务面板低频刷新（驱动 sc query 较重，约每 2 秒）
         self._services_tick_counter = getattr(self, "_services_tick_counter", 0) + 1
@@ -319,15 +322,18 @@ class CapabilityNexusGUI:
         col_output = ttk.Frame(main)
         col_request = ttk.Frame(main)
         col_runtime = ttk.Frame(main)
+        col_solution = ttk.Frame(main)
         main.add(col_input, weight=1)
         main.add(col_output, weight=1)
         main.add(col_request, weight=1)
         main.add(col_runtime, weight=1)
+        main.add(col_solution, weight=1)
 
         self._build_device_tree(col_input)
         self._build_output_panel(col_output)
         self._build_request_panel(col_request)
         self._build_runtime_dashboard(col_runtime)
+        self._build_solution_panel(col_solution)
 
         self._build_log_panel(self.root)
 
@@ -445,6 +451,54 @@ class CapabilityNexusGUI:
         self.rt_output.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
 
         self._runtime_dashboard_nb = nb
+
+    # ------------------------------------------------------------------
+    # Solution 用户确认面板（Phase 14 最小接线，读取注入的 controller）
+    # ------------------------------------------------------------------
+    def _build_solution_panel(self, parent):
+        """在 Solution 列中放置 SolutionPanel（用户确认入口）。
+
+        Panel 只使用 app.solution_controller（由 app._build_solution_stack 注入），
+        不直接访问 Graph 内部、不直接调用 MappingEngine。引擎未启动时显示占位提示。
+        """
+        if self.app is None or not hasattr(self.app, "solution_controller"):
+            box = ttk.LabelFrame(parent, text="Solution Builder")
+            box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+            ttk.Label(box, text="启动引擎后可创建 Solution").pack(padx=6, pady=6)
+            self.solution_panel = None
+            return
+
+        controller = self.app.solution_controller
+
+        def _defs_from_registry():
+            """从 app.registry 取出全部能力定义，供 Discover 作为源/目标候选。"""
+            from core.capability_definition import CapabilityDefinition
+
+            result = []
+            reg = getattr(self.app, "registry", None)
+            if reg is None:
+                return result
+            for info in reg.list_all().values():
+                d = info.get("definition") if isinstance(info, dict) else None
+                if isinstance(d, dict) and d.get("id"):
+                    result.append(CapabilityDefinition.from_dict(d))
+            return result
+
+        self.solution_panel = SolutionPanel(
+            parent,
+            controller,
+            source_provider=_defs_from_registry,
+            target_provider=_defs_from_registry,
+        )
+
+    def _refresh_solution_panel(self):
+        """监控 tick 中刷新 Solution 面板（只读 controller 状态，不碰 Graph）。"""
+        panel = getattr(self, "solution_panel", None)
+        if panel is not None:
+            try:
+                panel.refresh()
+            except Exception:
+                pass
 
     def _refresh_runtime_dashboard(self):
         """从 RuntimeStateService 刷新三个页面（UI 只读状态快照）。"""
