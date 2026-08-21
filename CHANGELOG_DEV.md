@@ -272,3 +272,64 @@ PhoneProfileStore / MappingEngine / X360 Output 均未改动。
 
 ### 本 Phase 明确不做
 UI 能力列表 / 自动能力发现 / 能力数据库 / Graph 编辑器 / Solution System / 修改 X360。
+
+---
+
+## 2026-08-21 — Capability Provider/Consumer 抽象层（V1.9 Phase 3）
+
+提交：`feat: introduce capability provider/consumer abstraction`
+
+在 Routing Layer 之上引入 Provider（输入侧）/ Consumer（输出侧）抽象，使
+"设备无关"延伸到两端业务入口。PhoneFrameParser 不再作为直接业务入口，X360
+输出被包装为 Consumer；MappingEngine / X360 底层 / DeviceContext / Reconnect /
+Profile 均不修改。
+
+### 新增核心抽象
+- `core/provider.py`：`CapabilityProvider` 基类——生命周期 `start()` / `stop()` /
+  `is_running()`；能力声明 `capabilities() -> List[str]`（字符串，设备无关）；
+  `publish(event)` 把 `CapabilityEvent` 交给注入的 sink（router / event_bus）。
+- `core/consumer.py`：`CapabilityConsumer` 基类——`consume(event: CapabilityEvent)`；
+  不直接实现，子类化后对接具体后端。
+
+### PhoneProvider（devices/phone_provider.py）
+- 包装 `PhoneFrameParser`，成为手机输入的业务入口（`PhoneProvider -> CapabilityEvent
+  -> CapabilityRouter`）。`parse(message)` 委托内部 `PhoneFrameParser` 解析，解析出的
+  `CapabilityEvent` 经注入的 `event_bus`（或 `publish`）流出。
+- `capabilities()` 返回该手机能力名（显式配置优先，否则从 hello 解析身份取）。
+- 内部 parser 的 `event_bus` 用转发 shim，使 `set_event_bus` 注入/同步后转发目标
+  自动更新（引擎重连/重启无碍）。`PhoneFrameParser` 解析逻辑零修改。
+
+### X360Consumer（output/x360_consumer.py）
+- 包装 X360 输出为 `CapabilityConsumer`：`consume(CapabilityEvent)` 把
+  `event.capability`（xbox.* 目标）/`event.value` 交给底层 `OutputRouter.send`。
+- X360 底层（VirtualXInput / RealXInputOutput / OutputRouter 路由）不修改。
+
+### 集成（保持不破坏）
+- `tools/services.py` `DeviceContext.parser` 由 `PhoneFrameParser` 改为
+  `PhoneProvider(...)`（业务入口统一）；`set_event_bus` 经 `event_bus` 属性兼容。
+  Multi Device Runtime / Reconnect / Profile 行为不变。
+- `app.py` `_build_outputs`：`OutputEvent -> CapabilityEvent -> X360Consumer.consume`
+  替代原 `output_router.send` lambda；底层 `OutputRouter.send` 仍由 Consumer 调用，
+  X360 行为一致。
+
+### 保持不修改
+MappingEngine / X360 底层 / DeviceContext / Reconnect Lifecycle / PhoneProfileStore。
+
+### 测试（新增）
+- `tests/test_provider.py`：PhoneProvider 产出带 device_id 的 CapabilityEvent、
+  `event_bus` sink、`capabilities()`、生命周期、基类 `publish` 转发。
+- `tests/test_consumer.py`：基类 `consume` 未实现抛 NotImplementedError、
+  X360Consumer 把事件发给底层、`CapabilityEvent` 同对象送达自定义消费者。
+- `tests/test_runtime.py`：PhoneProvider -> CapabilityRouter -> (MappingAdapter)
+  -> X360Consumer 完整链路；phone.roll -> xbox.right_x 值透传、device_id 保留。
+
+### 验证汇总（本沙箱）
+- 新增 10 passed（provider/consumer/runtime）；既有 test_capability(5) /
+  test_capability_router(8) / test_pipeline(2) / test_phone(6) /
+  test_phone_profile(7) 共 28 均通过。
+- `test_phone_reconnect.py` 在本沙箱 pytest 采集期偶发卡死（websockets 交互，
+  非回归），手动 `python -u` 验证 DeviceContext.parser=PhoneProvider、多设备断开
+  隔离、PhoneProvider 产出 CapabilityEvent 均正常。
+
+### 本 Phase 明确不做
+UI / Capability 数据库 / Solution System / Graph 编辑器。

@@ -200,9 +200,18 @@ class CapabilityNexusApp:
             mappings=self._profile_data.get("mappings", {}),
         )
 
-        # OutputEvent -> 路由
+        # X360 输出消费者（CapabilityConsumer 包装，底层 OutputRouter 不修改）
+        from output.x360_consumer import X360Consumer
+        self.x360_consumer = X360Consumer(self.output_router)
+
+        # OutputEvent -> CapabilityEvent -> X360Consumer
+        # （统一能力消费者入口；底层 X360 发送仍由 OutputRouter 完成）
         def output_receive(event):
-            self.output_router.send(event.target, event.value)
+            self.x360_consumer.consume(CapabilityEvent(
+                device_id=X360Consumer.DEVICE_ID,
+                capability=event.target,
+                value=event.value,
+            ))
 
         self.event_bus.subscribe(OutputEvent, output_receive)
 

@@ -12,6 +12,7 @@ import uuid
 from collections import deque
 
 from devices.websocket_connection import PhoneFrameParser
+from devices.phone_provider import PhoneProvider
 
 
 def _is_local(ip):
@@ -124,9 +125,14 @@ class DeviceContext:
                  event_bus=None):
         self.device_id = device_id
         self.session = DeviceSession(device_id, name, capabilities)
-        # 每台设备一个独立 parser，绑定到引擎 event_bus：消息按 device_id
-        # 路由到对应 parser，禁止跨设备共享全局 parser。
-        self.parser = PhoneFrameParser(event_bus=event_bus)
+        # 每台设备一个独立 Provider（业务入口），内部包装 PhoneFrameParser，
+        # 绑定到引擎 event_bus：消息按 device_id 路由到对应 parser，禁止跨设备
+        # 共享全局 parser。PhoneFrameParser 不再作为直接业务入口。
+        self.parser = PhoneProvider(
+            device_id=device_id,
+            capabilities=capabilities,
+            event_bus=event_bus,
+        )
         self.websocket = websocket
 
     @property
