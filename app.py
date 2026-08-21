@@ -110,6 +110,12 @@ class CapabilityNexusApp:
         self.router = CapabilityRouter()
         self.router.subscribe(CapabilityMappingAdapter(stream_receive).handle)
 
+        # 运行时状态服务：订阅路由层，聚合 device / capability / consumer 状态，
+        # 供 Runtime Dashboard UI 读取（不直接依赖 PhoneFrameParser/Mapping/X360）。
+        from core.runtime_state import RuntimeStateService
+        self.runtime_state = RuntimeStateService()
+        self.runtime_state.attach_router(self.router)
+
         def capability_receive(event):
             # EventBus 上的 CapabilityEvent 进入路由层
             self.router.publish(event)
@@ -203,6 +209,8 @@ class CapabilityNexusApp:
         # X360 输出消费者（CapabilityConsumer 包装，底层 OutputRouter 不修改）
         from output.x360_consumer import X360Consumer
         self.x360_consumer = X360Consumer(self.output_router)
+        # 运行时状态：标记 X360 消费者在线（输出已构建）
+        self.runtime_state.set_consumer_status(X360Consumer.DEVICE_ID, True)
 
         # OutputEvent -> CapabilityEvent -> X360Consumer
         # （统一能力消费者入口；底层 X360 发送仍由 OutputRouter 完成）

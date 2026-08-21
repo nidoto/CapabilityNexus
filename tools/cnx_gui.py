@@ -133,6 +133,7 @@ class CapabilityNexusGUI:
         self._check_output_snapshot()
         self._refresh_live_values()
         self._render_request_monitor()
+        self._refresh_runtime_dashboard()
 
         # 服务面板低频刷新（驱动 sc query 较重，约每 2 秒）
         self._services_tick_counter = getattr(self, "_services_tick_counter", 0) + 1
@@ -317,13 +318,16 @@ class CapabilityNexusGUI:
         col_input = ttk.Frame(main)
         col_output = ttk.Frame(main)
         col_request = ttk.Frame(main)
+        col_runtime = ttk.Frame(main)
         main.add(col_input, weight=1)
         main.add(col_output, weight=1)
         main.add(col_request, weight=1)
+        main.add(col_runtime, weight=1)
 
         self._build_device_tree(col_input)
         self._build_output_panel(col_output)
         self._build_request_panel(col_request)
+        self._build_runtime_dashboard(col_runtime)
 
         self._build_log_panel(self.root)
 
@@ -385,6 +389,118 @@ class CapabilityNexusGUI:
             self.device_tree.selection_set(item)
 
         self.tree_menu.tk_popup(event.x_root, event.y_root)
+
+    # ------------------------------------------------------------------
+    # Runtime Dashboard（读取 RuntimeStateService，不触碰底层内部对象）
+    # ------------------------------------------------------------------
+    def _build_runtime_dashboard(self, parent):
+        """构建 Runtime 仪表盘：Devices / Capability / Output 三个页面。
+
+        数据全部来自 app.runtime_state（订阅 CapabilityRouter 聚合得到），
+        不直接访问 PhoneFrameParser / MappingEngine / X360。
+        """
+        box = ttk.LabelFrame(parent, text="Runtime Dashboard")
+        box.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        nb = ttk.Notebook(box)
+        nb.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+
+        # Devices 页面
+        dev_frame = ttk.Frame(nb)
+        nb.add(dev_frame, text="Devices")
+        self.rt_devices = ttk.Treeview(
+            dev_frame, columns=("provider", "connected", "capabilities"), show="headings")
+        self.rt_devices.heading("#0", text="device_id")
+        self.rt_devices.heading("provider", text="provider")
+        self.rt_devices.heading("connected", text="connected")
+        self.rt_devices.heading("capabilities", text="capabilities")
+        self.rt_devices.column("#0", width=120)
+        self.rt_devices.column("provider", width=80)
+        self.rt_devices.column("connected", width=80)
+        self.rt_devices.column("capabilities", width=200)
+        self.rt_devices.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Capability 页面
+        cap_frame = ttk.Frame(nb)
+        nb.add(cap_frame, text="Capability")
+        self.rt_caps = ttk.Treeview(
+            cap_frame, columns=("value", "timestamp"), show="headings")
+        self.rt_caps.heading("#0", text="capability")
+        self.rt_caps.heading("value", text="value")
+        self.rt_caps.heading("timestamp", text="timestamp")
+        self.rt_caps.column("#0", width=160)
+        self.rt_caps.column("value", width=90)
+        self.rt_caps.column("timestamp", width=160)
+        self.rt_caps.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Output 页面
+        out_frame = ttk.Frame(nb)
+        nb.add(out_frame, text="Output")
+        self.rt_output = ttk.Treeview(
+            out_frame, columns=("status",), show="headings")
+        self.rt_output.heading("#0", text="consumer")
+        self.rt_output.heading("status", text="status")
+        self.rt_output.column("#0", width=160)
+        self.rt_output.column("status", width=100)
+        self.rt_output.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        self._runtime_dashboard_nb = nb
+
+    def _refresh_runtime_dashboard(self):
+        """从 RuntimeStateService 刷新三个页面（UI 只读状态快照）。"""
+        if self.app is None or not hasattr(self.app, "runtime_state"):
+            return
+        state = self.app.runtime_state
+
+        # 把 WebService 公开设备上下文注入状态（device / provider / connected），
+        # 不访问 PhoneFrameParser / MappingEngine / X360。
+        web = getattr(self, "_web_service", None)
+        if web is not None and getattr(web, "_server", None) is not None:
+            try:
+                for dev_id, ctx in web.device_contexts().items():
+                    status = (ctx.get("status") or "OFFLINE")
+                    caps = ctx.get("capabilities") or []
+                    state.register_device(
+                        dev_id,
+                        provider="phone",
+                        connected=(status == "CONNECTED"),
+                        capabilities=caps,
+                    )
+            except Exception:
+                pass
+
+        # Devices
+        try:
+            self.rt_devices.delete(*self.rt_devices.get_children())
+            for d in state.get_devices():
+                self.rt_devices.insert("", "end", text=d["device_id"], values=(
+                    d["provider"],
+                    "yes" if d["connected"] else "no",
+                    ", ".join(d["capabilities"]),
+                ))
+        except Exception:
+            pass
+
+        # Capability
+        try:
+            self.rt_caps.delete(*self.rt_caps.get_children())
+            for c in state.get_capabilities():
+                ts = c["timestamp"]
+                ts_text = "" if ts is None else (f"{ts:.3f}")
+                self.rt_caps.insert("", "end", text=(
+                    f"{c['device_id']}:{c['capability']}"), values=(
+                    c["value"], ts_text))
+        except Exception:
+            pass
+
+        # Output
+        try:
+            self.rt_output.delete(*self.rt_output.get_children())
+            for name, connected in state.get_output_status().items():
+                self.rt_output.insert("", "end", text=name, values=(
+                    "online" if connected else "offline",))
+        except Exception:
+            pass
 
     def _reload_runtime_mapping(self, profile):
         if self.app is None or not hasattr(self.app, "mapping_engine"):
