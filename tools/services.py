@@ -11,6 +11,8 @@ import time
 import uuid
 from collections import deque
 
+from devices.websocket_connection import PhoneFrameParser
+
 
 def _is_local(ip):
     """判断是否为局域网私有 IP（RFC 1918 + CGNAT + link-local）。"""
@@ -106,6 +108,37 @@ class DeviceSession:
         }
 
 
+class DeviceContext:
+    """单台手机设备的运行时上下文（按 device_id 聚合）。
+
+    每台手机拥有独立的：
+      - session：连接生命周期状态（DeviceSession）
+      - parser ：PhoneFrameParser（解析该设备的传感器/按钮帧）
+      - websocket：当前活跃 WebSocket 连接（断开时为 None）
+
+    多手机并存时，WebService 用 dict[device_id -> DeviceContext] 管理，
+    消息按 device_id 路由到对应 parser，断开只影响对应设备，互不覆盖。
+    """
+
+    def __init__(self, device_id, name="Phone", capabilities=None, websocket=None,
+                 event_bus=None):
+        self.device_id = device_id
+        self.session = DeviceSession(device_id, name, capabilities)
+        # 每台设备一个独立 parser，绑定到引擎 event_bus：消息按 device_id
+        # 路由到对应 parser，禁止跨设备共享全局 parser。
+        self.parser = PhoneFrameParser(event_bus=event_bus)
+        self.websocket = websocket
+
+    @property
+    def status(self):
+        return self.session.status
+
+    def to_dict(self):
+        d = self.session.to_dict()
+        d["websocket_open"] = self.websocket is not None
+        return d
+
+
 class WebService:
     """Web 手机服务：独立于引擎的 WebSocket 服务器。
 
@@ -118,20 +151,35 @@ class WebService:
     重连时按 device_id 恢复同一 session，不创建新设备。
     """
 
-    def __init__(self, port=8765, callback=None, use_https=True, on_client_change=None):
+    def __init__(self, port=8765, callback=None, use_https=True, on_client_change=None,
+                 event_bus=None):
         self.port = port
         self.callback = callback
         self.use_https = use_https
         self._on_client_change = on_client_change  # 手机连接/断开回调(计数)，给 GUI
+        # 引擎 event_bus：消息由对应设备的独立 parser 发布到这里。
+        # 引擎可能晚于 Web 服务启动，故允许后续通过 set_event_bus 注入。
+        self.event_bus = event_bus
         self._server = None
         self._lock = threading.Lock()
-        self._parser = None  # PhoneFrameParser，用于记录连接的手机设备
-        self._session = None  # DeviceSession，按 device_id 保留设备对象
+        # 每台手机一台设备：device_id -> DeviceContext（session + parser + websocket）
+        self._devices = {}
         self._client_count = 0
         self._ssl = None
         self._last_data_ts = None  # 最近一次收到手机真实数据的时间戳
         self._last_frame_ts = None  # 上一帧真实数据到达的时间戳（算帧间隔）
         self._data_intervals = deque(maxlen=50)  # 最近 50 帧到达间隔采样（取平均延时）
+
+    def set_event_bus(self, event_bus):
+        """引擎启动后注入 event_bus，使各设备 parser 能发布到引擎。
+
+        已存在的 DeviceContext 同步更新 parser 的 event_bus（保持按钮边沿状态）。
+        """
+        with self._lock:
+            self.event_bus = event_bus
+            if event_bus is not None:
+                for ctx in self._devices.values():
+                    ctx.parser.event_bus = event_bus
 
     @property
     def scheme(self):
@@ -142,19 +190,9 @@ class WebService:
         return "wss" if self.scheme == "https" else "ws"
 
     def _on_client_count_changed(self, count):
-        """WebSocket 客户端数量变化（连接或断开）。
-
-        断开（count 归 0）且当前为 CONNECTED 时，进入 RECONNECTING：
-        保留设备对象（device_id / profile / parser），等待手机重连。
-        """
+        """WebSocket 客户端数量变化（连接或断开）→ 仅用于通知 GUI 刷新。"""
         with self._lock:
             self._client_count = count
-            if (count == 0 and self._session is not None
-                    and self._session.status == DeviceSession.STATUS_CONNECTED):
-                self._session.status = DeviceSession.STATUS_RECONNECTING
-                self._session.reconnect_attempts += 1
-                # 注意：不清除 self._parser / session，设备对象保留
-        # 通知 GUI 刷新
         cb = self._on_client_change
         if cb is not None:
             try:
@@ -162,28 +200,106 @@ class WebService:
             except Exception as error:
                 print("[WebService] on_client_change callback failed:", error)
 
+    def _on_client_disconnected(self, websocket):
+        """单个 WebSocket 连接断开：只影响对应 device_id 的设备上下文。
+
+        定位到持有该 websocket 的 DeviceContext，将其 session 置为 RECONNECTING
+        （保留 device_id / profile / parser / 历史配置），等待手机按 device_id 重连。
+        不影响其他仍在连接的设备。
+        """
+        with self._lock:
+            target_id = None
+            for dev_id, ctx in self._devices.items():
+                if ctx.websocket is websocket:
+                    target_id = dev_id
+                    break
+            if target_id is None:
+                return
+            ctx = self._devices[target_id]
+            ctx.websocket = None
+            if ctx.session.status == DeviceSession.STATUS_CONNECTED:
+                ctx.session.status = DeviceSession.STATUS_RECONNECTING
+                ctx.session.reconnect_attempts += 1
+                # 注意：不删除 DeviceContext，设备对象（含 parser / profile）保留
+
     @property
     def phone_status(self):
-        """返回当前手机连接状态：CONNECTED / RECONNECTING / OFFLINE。"""
+        """返回当前（或最近活跃）手机连接状态：CONNECTED / RECONNECTING / OFFLINE。
+
+        多设备下取"最优"状态用于整体指示：任一 CONNECTED 即 CONNECTED；
+        否则任一 RECONNECTING 即 RECONNECTING；都为空则 OFFLINE。
+        """
         with self._lock:
-            if self._server is None or self._session is None:
+            if self._server is None or not self._devices:
                 return DeviceSession.STATUS_OFFLINE
-            return self._session.status
+            has_reconnecting = False
+            for ctx in self._devices.values():
+                if ctx.session.status == DeviceSession.STATUS_CONNECTED:
+                    return DeviceSession.STATUS_CONNECTED
+                if ctx.session.status == DeviceSession.STATUS_RECONNECTING:
+                    has_reconnecting = True
+            return DeviceSession.STATUS_RECONNECTING if has_reconnecting else DeviceSession.STATUS_OFFLINE
 
     @property
     def phone_session(self):
-        """返回当前设备 session 快照 dict（含 device_id/status/last_seen/reconnect_attempts）。"""
+        """返回当前活跃设备的 session 快照（多设备取第一个有状态的）。"""
         with self._lock:
-            if self._session is None:
+            if not self._devices:
                 return None
-            return self._session.to_dict()
+            for ctx in self._devices.values():
+                if ctx.session.status != DeviceSession.STATUS_OFFLINE:
+                    return ctx.to_dict()
+            # 全部 OFFLINE：返回最后一个设备的快照
+            last = next(reversed(self._devices.values()))
+            return last.to_dict()
+
+    def device_contexts(self):
+        """返回所有 DeviceContext 的快照列表（dict）。"""
+        with self._lock:
+            return {dev_id: ctx.to_dict() for dev_id, ctx in self._devices.items()}
+
+    def _resolve_device_id(self, data, websocket):
+        """从帧或当前 websocket 反查 device_id（用于非 hello 帧路由）。"""
+        dev_id = data.get("device_id")
+        if dev_id:
+            return dev_id
+        with self._lock:
+            for cid, ctx in self._devices.items():
+                if ctx.websocket is websocket:
+                    return cid
+        return None
+
+    def _get_or_create_context(self, dev_id, name, capabilities, websocket):
+        """按 device_id 获取或创建 DeviceContext，绝不覆盖其他设备。
+
+        - 不存在：新建并登记。
+        - 已存在：恢复同一设备（更新 websocket 与展示信息、重置连接状态），
+          不重建、不覆盖其他设备。
+        """
+        with self._lock:
+            ctx = self._devices.get(dev_id)
+            if ctx is None:
+                ctx = DeviceContext(
+                    dev_id, name or "Phone", capabilities, websocket,
+                    event_bus=self.event_bus,
+                )
+                self._devices[dev_id] = ctx
+            else:
+                # 已存在：恢复同一设备，更新 websocket 与展示信息，不重建
+                ctx.websocket = websocket
+                ctx.session.status = DeviceSession.STATUS_CONNECTED
+                ctx.session.last_seen = time.time()
+                ctx.session.reconnect_attempts = 0
+                if name:
+                    ctx.session.name = name
+                if capabilities:
+                    ctx.session.capabilities = list(capabilities)
+            return ctx
 
     def _make_server(self):
         from devices.websocket_connection import WebSocketServerConnection
-        from devices.websocket_connection import PhoneFrameParser
         from devices.websocket_connection import PhoneProfileStore
 
-        self._parser = PhoneFrameParser(event_bus=None)
         self._profile_store = PhoneProfileStore()
 
         # HTTPS：生成自签证书
@@ -197,8 +313,10 @@ class WebService:
                 self._ssl = None
 
         def wrapped_callback(message, websocket=None):
-            # 解析 hello 记录设备身份；sensors/buttons 帧只更新设备存在，
-            # 实际能力数据由外部 callback 转发（带 event_bus 的 parser）
+            # 多设备运行时：每条消息必须按 device_id 找到对应 DeviceContext，
+            # 并由该设备独立的 parser 解析（禁止全局共享 parser）。
+            # 真实数据（hello/sensors/buttons）直接发布到引擎 event_bus；
+            # self.callback 仅用于 GUI 通知（日志/刷新），不再承担解析。
             try:
                 import json as _json
 
@@ -206,28 +324,24 @@ class WebService:
                     message = message.decode("utf-8", errors="replace")
                 data = _json.loads(message)
                 frame_type = data.get("t", data.get("type", "sensors"))
+
+                # 解析 device_id（hello 帧从解析器取；其余帧从帧或 websocket 反查）
+                temp_parser = PhoneFrameParser(event_bus=None)
+                temp_parser.parse(message)
+                dev_id = temp_parser.device_id or data.get("device_id")
+
                 if frame_type == "hello":
-                    self._parser.parse(message)
                     # 身份主键：device_id（手机端生成并持久化）。
                     # 手机未带 device_id 时由服务端生成并回传，让其持久化。
-                    dev_id = self._parser.device_id or str(uuid.uuid4())
-                    if self._parser.device:
-                        self._parser.device["device_id"] = dev_id
-                    # 恢复已有 session（device_id 校验通过则不创建新设备）
-                    with self._lock:
-                        if self._session is None or self._session.device_id != dev_id:
-                            self._session = DeviceSession(
-                                dev_id,
-                                self._parser.device_name,
-                                self._parser.device_capabilities,
-                            )
-                        self._session.status = DeviceSession.STATUS_CONNECTED
-                        self._session.last_seen = time.time()
-                        self._session.reconnect_attempts = 0
-                        self._session.name = self._parser.device_name
-                        self._session.capabilities = self._parser.device_capabilities
+                    if not dev_id:
+                        dev_id = str(uuid.uuid4())
+                    name = temp_parser.device_name
+                    caps = temp_parser.device_capabilities
+                    # hello 流程：存在则恢复同一设备（不覆盖其他设备）；
+                    # 不存在则创建。设备身份/配置以 device_id 为准。
+                    ctx = self._get_or_create_context(dev_id, name, caps, websocket)
                     # 兼容旧格式：按手机名迁移 <用户>-<手机名>.json
-                    self._profile_store.migrate_legacy(dev_id, self._parser.device_name)
+                    self._profile_store.migrate_legacy(dev_id, name)
                     saved = self._profile_store.load(dev_id)
                     if websocket is not None:
                         try:
@@ -244,24 +358,31 @@ class WebService:
                                 })
                         except Exception as error:
                             print("[WebService] Config reply failed:", error)
-                elif frame_type == "config":
-                    # 手机保存配置：反转/方向盘最大角度/油门增益
-                    self._parser.device = self._parser.device or {"name": "Phone"}
-                    dev_id = self._parser.device_id or data.get("device_id")
+                    # 由该设备独立 parser 发布 hello 身份（保持按钮边沿状态隔离）
+                    if self.event_bus is not None:
+                        ctx.parser.parse(message)
+                else:
+                    # 非 hello 帧：必须按 device_id 找到对应 context，否则丢弃
+                    dev_id = self._resolve_device_id(data, websocket)
                     if not dev_id:
-                        dev_id = str(uuid.uuid4())
-                        if self._parser.device:
-                            self._parser.device["device_id"] = dev_id
-                    cfg = data.get("config") or {}
-                    self._profile_store.save(dev_id, cfg)
+                        return
+                    with self._lock:
+                        ctx = self._devices.get(dev_id)
+                    if ctx is None:
+                        return
+                    if frame_type == "config":
+                        # 手机保存配置：反转/方向盘最大角度/油门增益
+                        cfg = data.get("config") or {}
+                        self._profile_store.save(dev_id, cfg)
+                        return
+                    # sensors / buttons 等真实数据：只路由到对应设备的独立 parser
+                    if self.event_bus is not None:
+                        ctx.parser.parse(message)
 
                 # 手机真实数据（hello/传感器/按钮）算"活跃连接"；
                 # 同时用服务端到达时间戳测平均帧间隔（近似平均延时，不增加任何传输数据）
                 if frame_type in ("hello", "sensors", "sensor", "buttons", "config"):
                     now = time.time()
-                    with self._lock:
-                        if self._session is not None:
-                            self._session.last_seen = now
                     if self._last_frame_ts is not None:
                         interval_ms = (now - self._last_frame_ts) * 1000
                         # 过滤异常间隔（<1ms 或 >2s），避免重连/暂停污染平均值
@@ -280,6 +401,7 @@ class WebService:
             port=self.port,
             ssl_context=self._ssl,
             on_client_change=self._on_client_count_changed,
+            on_client_disconnect=self._on_client_disconnected,
         )
         self._server = server
         return server
@@ -295,23 +417,35 @@ class WebService:
 
     @property
     def device_name(self):
+        """返回当前活跃设备的显示名（多设备取第一个非 OFFLINE 的）。"""
         with self._lock:
-            if self._parser is not None:
-                return self._parser.device_name
+            for ctx in self._devices.values():
+                if ctx.session.status != DeviceSession.STATUS_OFFLINE:
+                    return ctx.session.name
+            for ctx in self._devices.values():
+                return ctx.session.name
         return ""
 
     @property
     def device_id(self):
+        """返回当前活跃设备的 device_id（多设备取第一个非 OFFLINE 的）。"""
         with self._lock:
-            if self._parser is not None:
-                return self._parser.device_id
+            for dev_id, ctx in self._devices.items():
+                if ctx.session.status != DeviceSession.STATUS_OFFLINE:
+                    return dev_id
+            for dev_id in self._devices:
+                return dev_id
         return ""
 
     @property
     def device_capabilities(self):
+        """返回当前活跃设备的能力列表。"""
         with self._lock:
-            if self._parser is not None:
-                return self._parser.device_capabilities
+            for ctx in self._devices.values():
+                if ctx.session.status != DeviceSession.STATUS_OFFLINE:
+                    return list(ctx.session.capabilities)
+            for ctx in self._devices.values():
+                return list(ctx.session.capabilities)
         return []
 
     def is_running(self):
@@ -366,8 +500,7 @@ class WebService:
 
             server = self._server
             self._server = None
-            self._parser = None
-            self._session = None  # 主动停止：设备对象移除，状态转 OFFLINE
+            self._devices = {}  # 主动停止：所有设备对象移除，状态转 OFFLINE
             self._data_intervals.clear()
             try:
                 server.close()
@@ -392,6 +525,7 @@ class WebService:
             "ws_urls": [f"{ws_scheme}://{ip}:{self.port}/ws" for ip in ips],
             "phone_status": self.phone_status,
             "phone_session": session,
+            "phone_devices": self.device_contexts(),
         }
 
     def send_to_phones(self, message):
@@ -438,5 +572,4 @@ class WebService:
                 except Exception:
                     pass
                 self._server = None
-                self._parser = None
-                self._session = None
+                self._devices = {}

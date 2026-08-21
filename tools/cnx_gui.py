@@ -1533,26 +1533,12 @@ class CapabilityNexusGUI:
             print("[GUI] Phone vibration forwarding setup failed:", error)
 
     def _phone_data_callback(self, message):
-        """Web 服务收到的手机数据：解析并发布到引擎的 event_bus。
+        """Web 服务回调：仅做 GUI 侧日志/设备树刷新通知。
 
-        引擎未运行时丢弃（用户可先开 Web 服务，再启动引擎）。
+        真实数据解析与发布到引擎 event_bus 已由 WebService 按 device_id
+        路由到各设备独立 parser 完成（详见 tools/services.py），此处不复用
+        全局 parser，避免跨设备共享状态。
         """
-        if self.app is None or not hasattr(self.app, "event_bus"):
-            return
-
-        from devices.websocket_connection import PhoneFrameParser
-
-        # 持久 parser：保持按钮边沿状态跨消息
-        if not hasattr(self, "_phone_engine_parser") or self._phone_engine_parser is None:
-            self._phone_engine_parser = PhoneFrameParser(self.app.event_bus)
-        else:
-            self._phone_engine_parser.event_bus = self.app.event_bus
-
-        try:
-            self._phone_engine_parser.parse(message)
-        except Exception as error:
-            print("[PhoneData] parse failed:", error)
-
         # 手机上报 hello（名称/能力）时刷新设备树并记录日志
         try:
             import json as _json
@@ -3814,6 +3800,10 @@ class CapabilityNexusGUI:
             self.log("Engine started.")
             self._set_engine_badge(True)
             self._ensure_phone_vibration_sub()
+            # 注入引擎 event_bus，使 WebService 按 device_id 路由到各设备 parser
+            web = getattr(self, "_web_service", None)
+            if web is not None:
+                web.set_event_bus(self.app.event_bus)
         except Exception as e:
             self.log(f"Engine start failed: {e}")
             self._set_engine_badge(False)
@@ -3834,6 +3824,11 @@ class CapabilityNexusGUI:
         self.app = None
         self.log("Engine stopped.")
         self._set_engine_badge(False)
+
+        # 引擎停止：WebService 不再发布到旧 event_bus（设备上下文保留，待重连）
+        web = getattr(self, "_web_service", None)
+        if web is not None:
+            web.set_event_bus(None)
 
         self.refresh_devices()
 

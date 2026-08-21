@@ -167,12 +167,13 @@ WEB_DIR = _web_dir()
 class WebSocketServerConnection(LineConnection):
 
     def __init__(self, callback, host="0.0.0.0", port=8765, ssl_context=None,
-                 on_client_change=None):
+                 on_client_change=None, on_client_disconnect=None):
         super().__init__(callback)
         self.host = host
         self.port = port
         self.ssl_context = ssl_context
         self.on_client_change = on_client_change  # 客户端连接/断开回调(计数)
+        self.on_client_disconnect = on_client_disconnect  # 单个连接断开回调(websocket)
         self.server = None
         self.thread = None
         self._ready = None
@@ -193,6 +194,16 @@ class WebSocketServerConnection(LineConnection):
             callback(self.client_count)
         except Exception as error:
             print("[WebSocketServer] on_client_change callback failed:", error)
+
+    def _notify_client_disconnect(self, websocket):
+        """单个连接断开时通知上层（传入具体 websocket，便于按设备定位）。"""
+        callback = self.on_client_disconnect
+        if callback is None:
+            return
+        try:
+            callback(websocket)
+        except Exception as error:
+            print("[WebSocketServer] on_client_disconnect callback failed:", error)
 
     def open(self):
         self._ready = threading.Event()
@@ -285,6 +296,7 @@ class WebSocketServerConnection(LineConnection):
                 print("[WebSocketServer] Client disconnected")
             finally:
                 self._clients.discard(websocket)
+                self._notify_client_disconnect(websocket)
                 self._notify_client_change()
 
         self.server = await websockets.serve(

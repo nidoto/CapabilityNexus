@@ -40,7 +40,8 @@
             "connection": {
                 "type": "websocket",
                 "port": 8765
-            }
+            },
+            "preset_id": "phone_web_wheel"
         }
     ]
 }

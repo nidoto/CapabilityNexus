@@ -345,29 +345,16 @@ class DeviceManager:
             return connection
 
         if driver == "phone":
-            from devices.connection_factory import ConnectionFactory
-            from devices.websocket_connection import PhoneFrameParser
-
-            connection_params = entry.get("connection", {})
-            if "type" not in connection_params:
-                connection_params = {
-                    "type": "websocket",
-                    "port": entry.get("port", 8765),
-                }
-
-            parser = PhoneFrameParser(self.event_bus)
-
-            def phone_callback(message):
-                parser.parse(message)
-
-            connection = ConnectionFactory.create(
-                phone_callback,
-                connection_params,
-            )
-            connection.open()
-            # 把 parser 挂到连接实例上，供 GUI 读取手机上报的名称/能力
-            connection._phone_parser = parser
-            return connection
+            # 手机设备由 Web 服务（WebService）独立托管（见 discover() 注释）：
+            # 多设备运行时、hello 身份恢复、按 device_id 路由、断开仅影响单设备，
+            # 以及 HTTPS/配置/震动都集中在 WebService。引擎这里不再创建独立的
+            # WebSocket 服务器，否则会与 WebService 抢占 8765 端口，并引入
+            # 全局共享 parser（违反多设备隔离要求）。
+            # 因此 phone 条目在引擎侧视为"已交由 WebService 管理"，直接跳过，
+            # 不打开冲突监听、不创建全局 parser。
+            name = entry.get("name") or "Phone"
+            print(f"[DeviceManager] Phone device managed by WebService: {name}")
+            return None
 
         print("[DeviceManager] Unknown driver:", driver)
         return None
