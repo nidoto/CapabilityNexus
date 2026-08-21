@@ -52,3 +52,29 @@ def test_list_and_list_all():
     assert "motion.pitch" in all_keys
     # list() 只含精确注册（不含通配模式）
     assert "motion.pitch" in registry.list()
+
+
+def test_unregister_exact():
+    registry = CapabilityRegistry()
+    registry.register("p", _cap("motion.pitch"))
+    assert registry.exists("motion.pitch")
+
+    assert registry.unregister("motion.pitch") is True
+    assert not registry.exists("motion.pitch")
+    # 重复移除返回 False（无副作用）
+    assert registry.unregister("motion.pitch") is False
+
+
+def test_unregister_pattern():
+    registry = CapabilityRegistry()
+    registry.register("hidpkg", _cap("hid.axis*"))
+
+    assert registry.get("hid.axis0") is not None
+    # 按 "prefix*" 移除通配模式
+    assert registry.unregister("hid.axis*") is True
+    assert registry.get("hid.axis0") is None
+    # 按裸 prefix 也可移除
+    registry.register("hidpkg", _cap("hid.btn*"))
+    assert registry.unregister("hid.btn") is True
+    assert registry.get("hid.btn3") is None
+

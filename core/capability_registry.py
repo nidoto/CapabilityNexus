@@ -49,6 +49,27 @@ class CapabilityRegistry:
     def exists(self, capability_id):
         return self.get(capability_id) is not None
 
+    def unregister(self, capability_id):
+        """移除已注册的能力（精确 id 或通配模式前缀均可）。
+
+        返回是否实际移除了某条记录。
+        """
+        removed = False
+        if capability_id in self.registry:
+            del self.registry[capability_id]
+            removed = True
+
+        # 通配模式以 "*" 结尾，存储为 prefix；按 "prefix*" 或裸 prefix 均可移除。
+        if capability_id.endswith("*"):
+            prefix = capability_id[:-1]
+        else:
+            prefix = capability_id
+        if prefix in self.patterns:
+            del self.patterns[prefix]
+            removed = True
+
+        return removed
+
     def list(self):
         return self.registry
 
