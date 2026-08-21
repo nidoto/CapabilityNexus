@@ -27,3 +27,11 @@ logs/
 
 # 手机按设备保存的个人配置（不随仓库上传）
 config/phone_profiles/
+
+# 本地 Solution 落盘（SolutionStore 运行时生成，属个人运行产物，不随仓库上传）
+solutions/
+*.solution
+
+# pytest 缓存
+.pytest_cache/
+
